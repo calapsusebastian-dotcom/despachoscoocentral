@@ -773,6 +773,8 @@
 // Firebase scripts ya cargaron sincrónicamente desde <head>
 const auth = firebase.auth();
 const db   = firebase.firestore();
+// Forzar long polling (soluciona NS_BASE_STREAM_CLOSED en Firefox/algunos entornos)
+db.settings({ experimentalForceLongPolling: true, merge: true });
 
 // ─────────────────────────────────────────────
 //  FIREBASE HELPERS  (reemplazan localStorage)
