@@ -756,25 +756,31 @@
      JAVASCRIPT
 ══════════════════════════════════════════ -->
 <!-- Firebase compat -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/compat/app.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/compat/auth.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/compat/firestore.min.js"></script>
 <script>
-  if (!firebase.apps.length) {
-    firebase.initializeApp({
-      apiKey: "AIzaSyAGNoYEy6ZOVmpein4lmSmRtEET_WzPsDs",
-      authDomain: "despachos-pro-c3294.firebaseapp.com",
-      projectId: "despachos-pro-c3294",
-      storageBucket: "despachos-pro-c3294.firebasestorage.app",
-      messagingSenderId: "640265377949",
-      appId: "1:640265377949:web:c9b4a67fd530ae28b51c74"
-    });
-  }
-  var auth = firebase.auth();
-  var db   = firebase.firestore();
+  firebase.initializeApp({
+    apiKey: "AIzaSyAGNoYEy6ZOVmpein4lmSmRtEET_WzPsDs",
+    authDomain: "despachos-pro-c3294.firebaseapp.com",
+    projectId: "despachos-pro-c3294",
+    storageBucket: "despachos-pro-c3294.firebasestorage.app",
+    messagingSenderId: "640265377949",
+    appId: "1:640265377949:web:c9b4a67fd530ae28b51c74"
+  });
+  window.auth = firebase.auth();
+  window.db   = firebase.firestore();
+  document.dispatchEvent(new Event('firebase-ready'));
 </script>
 <script>
-// ─────────────────────────────────────────────
+// auth y db se asignan cuando el módulo ESM de Firebase termina de cargar
+let auth, db;
+document.addEventListener('firebase-ready', () => {
+  auth = window.auth;
+  db   = window.db;
+  startApp();
+});
+
 // ─────────────────────────────────────────────
 //  FIREBASE HELPERS  (reemplazan localStorage)
 // ─────────────────────────────────────────────
@@ -903,7 +909,9 @@ async function doLogin() {
     $('btn-login').textContent = 'Autenticando...';
     const cred = await auth.signInWithEmailAndPassword(email, pass);
     $('btn-login').textContent = 'Cargando perfil...';
-    let snap = await db.collection('usuarios').doc(cred.user.uid).get();
+
+    const docRef = db.collection('usuarios').doc(cred.user.uid);
+    let snap = await docRef.get();
 
     if (!snap.exists) {
       $('btn-login').textContent = 'Creando perfil...';
@@ -915,8 +923,9 @@ async function doLogin() {
       };
       const perfil = perfiles[email] || { name: email.split('@')[0], roles:['user'] };
       const userData = { id: cred.user.uid, name: perfil.name, email, roles: perfil.roles, activo: true };
-      await db.collection('usuarios').doc(cred.user.uid).set(userData);
-      snap = await db.collection('usuarios').doc(cred.user.uid).get();
+      await docRef.set(userData);
+      // Usar los datos directamente sin segundo get
+      snap = { exists: true, data: () => userData };
     }
 
     const user = snap.data();
@@ -1865,27 +1874,29 @@ function openPedidoWebModal() {
 }
 
 // ─────────────────────────────────────────────
-//  INIT
+//  INIT — arranca cuando Firebase está listo
 // ─────────────────────────────────────────────
-auth.onAuthStateChanged(async (firebaseUser) => {
-  if (firebaseUser) {
-    try {
-      const snap = await db.collection('usuarios').doc(firebaseUser.uid).get();
-      if (snap.exists) {
-        const user = snap.data();
-        if (user.activo === false) { await auth.signOut(); return; }
-        await loadAllData();
-        await initDataIfNeeded();
-        subscribeToData();
-        bootApp(user);
-        return;
-      }
-    } catch(e) { console.error('Session restore error:', e); }
-    await auth.signOut();
-  }
-  if ($('view-login')) $('view-login').style.display = 'grid';
-  if ($('view-app'))   $('view-app').classList.remove('active');
-});
+function startApp() {
+  auth.onAuthStateChanged(async (firebaseUser) => {
+    if (firebaseUser) {
+      try {
+        const snap = await db.collection('usuarios').doc(firebaseUser.uid).get();
+        if (snap.exists) {
+          const user = snap.data();
+          if (user.activo === false) { await auth.signOut(); return; }
+          await loadAllData();
+          await initDataIfNeeded();
+          subscribeToData();
+          bootApp(user);
+          return;
+        }
+      } catch(e) { console.error('Session restore error:', e); }
+      await auth.signOut();
+    }
+    if ($('view-login')) $('view-login').style.display = 'grid';
+    if ($('view-app'))   $('view-app').classList.remove('active');
+  });
+}
 
 // Cerrar modales con ESC
 document.addEventListener('keydown', e => {
