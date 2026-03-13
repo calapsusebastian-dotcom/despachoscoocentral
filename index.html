@@ -768,16 +768,15 @@
     messagingSenderId: "640265377949",
     appId: "1:640265377949:web:c9b4a67fd530ae28b51c74"
   });
-  window.auth = firebase.auth();
-  window.db   = firebase.firestore();
-  document.dispatchEvent(new Event('firebase-ready'));
+  window._auth = firebase.auth();
+  window._db   = firebase.firestore();
 </script>
 <script>
-// auth y db se asignan cuando el módulo ESM de Firebase termina de cargar
+// Firebase ya está en window._auth y window._db desde el <head>
 let auth, db;
-document.addEventListener('firebase-ready', () => {
-  auth = window.auth;
-  db   = window.db;
+document.addEventListener('DOMContentLoaded', () => {
+  auth = window._auth;
+  db   = window._db;
   startApp();
 });
 
