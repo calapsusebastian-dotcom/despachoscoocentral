@@ -885,9 +885,17 @@ function estadoIco(e) { return {Pendiente:'⏳',Despachado:'🚚'}[e]||''; }
 let session = null;
 
 async function doLogin() {
-  const email = $('l-email').value.trim();
-  const pass  = $('l-pass').value;
+  const emailEl = $('l-email');
+  const passEl  = $('l-pass');
+  const email = emailEl ? emailEl.value.trim() : '';
+  const pass  = passEl  ? passEl.value        : '';
   const err   = $('login-err');
+
+  if (!email || !pass) {
+    err.textContent = 'Ingresa correo y contraseña.';
+    err.style.display = 'block';
+    return;
+  }
   err.style.display='none';
   $('btn-login').disabled = true;
   $('btn-login').textContent = 'Conectando Firebase...';
@@ -1882,7 +1890,10 @@ auth.onAuthStateChanged(async (firebaseUser) => {
 // Cerrar modales con ESC
 document.addEventListener('keydown', e => {
   if (e.key==='Escape') document.querySelectorAll('.overlay.open').forEach(m=>m.classList.remove('open'));
-  if (e.key==='Enter' && $('view-login') && $('view-login').style.display!=='none') doLogin();
+  if (e.key==='Enter' && $('view-login') && $('view-login').style.display!=='none') {
+    e.preventDefault();
+    doLogin();
+  }
 });
 </script>
 </body>
