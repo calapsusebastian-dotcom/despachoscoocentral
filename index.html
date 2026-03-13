@@ -780,8 +780,8 @@ const FS_PROJECT = 'despachos-pro-c3294';
 const FS_BASE    = `https://firestore.googleapis.com/v1/projects/${FS_PROJECT}/databases/(default)/documents`;
 
 let _idToken = null;
-async function getToken() {
-  const user = auth.currentUser;
+async function getToken(userOverride) {
+  const user = userOverride || auth.currentUser;
   if (!user) throw new Error('No autenticado');
   _idToken = await user.getIdToken();
   return _idToken;
@@ -822,8 +822,8 @@ function fsToObj(fields) {
 }
 
 // GET un documento
-async function fsGet(col, id) {
-  const token = await getToken();
+async function fsGet(col, id, fbUser) {
+  const token = await getToken(fbUser);
   const r = await fetch(`${FS_BASE}/${col}/${id}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
@@ -834,14 +834,9 @@ async function fsGet(col, id) {
 }
 
 // SET (crear/reemplazar) un documento
-async function fsSet(col, id, data) {
-  const token = await getToken();
+async function fsSet(col, id, data, fbUser) {
+  const token = await getToken(fbUser);
   const url = `${FS_BASE}/${col}/${id}`;
-  await fetch(url + '?currentDocument.exists=false', {
-    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields: objToFs(data) })
-  }).catch(() => {}); // ignorar si ya existe
-  // PATCH para crear o reemplazar
   const r = await fetch(url, {
     method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields: objToFs(data) })
@@ -983,7 +978,7 @@ async function doLogin() {
     const cred = await auth.signInWithEmailAndPassword(email, pass);
     $('btn-login').textContent = 'Cargando perfil...';
 
-    let userData = await fsGet('usuarios', cred.user.uid);
+    let userData = await fsGet('usuarios', cred.user.uid, cred.user);
 
     if (!userData) {
       $('btn-login').textContent = 'Creando perfil...';
@@ -995,7 +990,7 @@ async function doLogin() {
       };
       const perfil = perfiles[email] || { name: email.split('@')[0], roles:['user'] };
       userData = { id: cred.user.uid, name: perfil.name, email, roles: perfil.roles, activo: true };
-      await fsSet('usuarios', cred.user.uid, userData);
+      await fsSet('usuarios', cred.user.uid, userData, cred.user);
     }
 
     const user = userData;
