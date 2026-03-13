@@ -672,19 +672,19 @@
         <label>Roles del usuario *</label>
         <div style="display:flex;flex-direction:column;gap:.55rem;margin-top:.3rem;background:#f8fafc;border:1.5px solid var(--border);border-radius:9px;padding:.9rem 1rem;">
           <label style="display:flex;align-items:center;gap:.7rem;cursor:pointer;text-transform:none;font-size:.88rem;color:var(--text);font-weight:500;letter-spacing:0">
-            <input type="radio" name="rol-grupo" id="rol-admin" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer"/>
+            <input type="checkbox" id="rol-admin" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer"/>
             <span>👑 <strong>Administrador</strong> — acceso total</span>
           </label>
           <label style="display:flex;align-items:center;gap:.7rem;cursor:pointer;text-transform:none;font-size:.88rem;color:var(--text);font-weight:500;letter-spacing:0">
-            <input type="radio" name="rol-grupo" id="rol-user" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer"/>
+            <input type="checkbox" id="rol-user" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer"/>
             <span>👤 <strong>Operador</strong> — crea y ve sus propios pedidos</span>
           </label>
           <label style="display:flex;align-items:center;gap:.7rem;cursor:pointer;text-transform:none;font-size:.88rem;color:var(--text);font-weight:500;letter-spacing:0">
-            <input type="radio" name="rol-grupo" id="rol-facturadora" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer"/>
+            <input type="checkbox" id="rol-facturadora" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer"/>
             <span>🧾 <strong>Facturadora</strong> — ve todos, edita solo factura</span>
           </label>
           <label style="display:flex;align-items:center;gap:.7rem;cursor:pointer;text-transform:none;font-size:.88rem;color:var(--text);font-weight:500;letter-spacing:0">
-            <input type="radio" name="rol-grupo" id="rol-web" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer"/>
+            <input type="checkbox" id="rol-web" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer"/>
             <span>🌐 <strong>Página Web</strong> — crea y ve solo pedidos web</span>
           </label>
         </div>
@@ -1040,12 +1040,18 @@ function bootApp(user) {
   const rolesLabel = (session.roles||[]).map(r=>roleNames[r]||r).join(' · ');
   $('s-role').textContent  = rolesLabel || '👤 Operador';
   $('s-avatar').textContent = user.name[0].toUpperCase();
+
+  // Nav: mostrar secciones según roles (el admin siempre ve todo)
   $('nav-productos').style.display = isAdmin() ? 'flex' : 'none';
   $('nav-usuarios').style.display  = isAdmin() ? 'flex' : 'none';
+  // Tab Web en sidebar: solo si tiene rol web Y no es admin (admin usa los tabs internos)
   $('nav-web').style.display       = hasRole('web') && !isAdmin() ? 'flex' : 'none';
+  // Tabs Pedidos / Página Web dentro del panel (solo admin)
   $('admin-tabs').style.display    = isAdmin() ? 'flex' : 'none';
-  // Si es rol web puro, arrancar en page-web
+
+  // Arrancar en la página correcta según rol principal
   if (hasRole('web') && !isAdmin() && !hasRole('user') && !hasRole('facturadora')) {
+    // Solo web puro → ir directo a página web
     showPageDirect('web');
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
     $('nav-web').classList.add('active');
@@ -1345,15 +1351,14 @@ function renderPedidos() {
 
   let base;
   if (isAdmin()) {
-    // Admin ve todo, filtrado por tab
     base = currentTab === 'web'
       ? todos.filter(p => p.origen==='web')
       : todos.filter(p => p.origen !== 'web');
-  } else if (hasRole('facturadora') && !hasRole('user') && !hasRole('web')) {
-    // Facturadora pura: ve todos los internos
+  } else if (hasRole('facturadora')) {
+    // Facturadora ve todos los pedidos internos (aunque tenga otros roles)
     base = todos.filter(p => p.origen !== 'web');
   } else {
-    // Operador / web / mixto: solo sus propios pedidos internos
+    // Operador / web: solo sus propios pedidos
     base = todos.filter(p => p.creadoPor === session.name && p.origen !== 'web');
   }
   const list = base.filter(p => {
@@ -1394,7 +1399,7 @@ function updateStats() {
     list = currentTab === 'web'
       ? todos.filter(p => p.origen==='web')
       : todos.filter(p => p.origen !== 'web');
-  } else if (hasRole('facturadora') && !hasRole('user') && !hasRole('web')) {
+  } else if (hasRole('facturadora')) {
     list = todos.filter(p => p.origen !== 'web');
   } else {
     list = todos.filter(p => p.creadoPor === session.name && p.origen !== 'web');
@@ -1408,8 +1413,10 @@ function updateStats() {
 function verPedido(id) {
   const p = get('dp_pedidos').find(x=>x.id===id); if(!p) return;
   // Operadores solo pueden ver sus propios pedidos
-  if (!isAdmin() && hasRole('user') && p.creadoPor !== session.name) { toast('⚠️ No tienes permiso para ver este pedido'); return; }
-  if (!isAdmin() && hasRole('web') && !hasRole('user') && p.creadoPor !== session.name) { toast('⚠️ No tienes permiso para ver este pedido'); return; }
+  // Permiso de ver: admin y facturadora ven todos; operador/web solo los suyos
+  if (!isAdmin() && !hasRole('facturadora') && p.creadoPor !== session.name) {
+    toast('⚠️ No tienes permiso para ver este pedido'); return;
+  }
   $('ver-body').innerHTML=`
     <div style="margin-bottom:1.2rem"><span class="badge badge-${p.estado?.toLowerCase()}" style="font-size:.85rem">${estadoIco(p.estado)} ${p.estado}</span></div>
     <div class="form-section">
@@ -1796,11 +1803,10 @@ function openEditUsuario(id) {
   $('u-email').value  = u.email;
   $('u-pass').value   = '';
   const roles = u.roles || [u.role||'user'];
-  // Radio buttons — marcar el primer rol del usuario
   $('rol-admin').checked       = roles.includes('admin');
-  $('rol-user').checked        = !roles.includes('admin') && roles.includes('user');
-  $('rol-facturadora').checked = !roles.includes('admin') && !roles.includes('user') && roles.includes('facturadora');
-  $('rol-web').checked         = roles.includes('web') && !roles.includes('admin') && !roles.includes('user');
+  $('rol-user').checked        = roles.includes('user');
+  $('rol-facturadora').checked = roles.includes('facturadora');
+  $('rol-web').checked         = roles.includes('web');
   $('u-activo').checked = u.activo !== false;
   $('u-pass-group').style.display = 'flex';
   const lbl = $('u-pass-group').querySelector('label');
@@ -1823,7 +1829,7 @@ async function saveUsuario() {
   if ($('rol-web').checked)         roles.push('web');
 
   if (!nombre || !email) { err.textContent='Nombre y correo son obligatorios.'; err.style.display='block'; return; }
-  if (roles.length===0)  { err.textContent='Selecciona un rol.'; err.style.display='block'; return; }
+  if (roles.length===0)  { err.textContent='Selecciona al menos un rol.'; err.style.display='block'; return; }
   if (!editUserId && !pass) { err.textContent='La contraseña es obligatoria para nuevos usuarios.'; err.style.display='block'; return; }
   if (pass && pass.length < 6) { err.textContent='La contraseña debe tener mínimo 6 caracteres.'; err.style.display='block'; return; }
 
