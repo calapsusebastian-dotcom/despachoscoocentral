@@ -755,24 +755,26 @@
 <!-- ══════════════════════════════════════════
      JAVASCRIPT
 ══════════════════════════════════════════ -->
-<!-- Firebase compat — debe cargar ANTES del script principal -->
-<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-app-compat.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-auth-compat.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-firestore-compat.min.js"></script>
+<!-- Firebase compat -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyAGNoYEy6ZOVmpein4lmSmRtEET_WzPsDs",
-    authDomain: "despachos-pro-c3294.firebaseapp.com",
-    projectId: "despachos-pro-c3294",
-    storageBucket: "despachos-pro-c3294.firebasestorage.app",
-    messagingSenderId: "640265377949",
-    appId: "1:640265377949:web:c9b4a67fd530ae28b51c74"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
-  const db   = firebase.firestore();
+  if (!firebase.apps.length) {
+    firebase.initializeApp({
+      apiKey: "AIzaSyAGNoYEy6ZOVmpein4lmSmRtEET_WzPsDs",
+      authDomain: "despachos-pro-c3294.firebaseapp.com",
+      projectId: "despachos-pro-c3294",
+      storageBucket: "despachos-pro-c3294.firebasestorage.app",
+      messagingSenderId: "640265377949",
+      appId: "1:640265377949:web:c9b4a67fd530ae28b51c74"
+    });
+  }
+  var auth = firebase.auth();
+  var db   = firebase.firestore();
 </script>
 <script>
+// ─────────────────────────────────────────────
 // ─────────────────────────────────────────────
 //  FIREBASE HELPERS  (reemplazan localStorage)
 // ─────────────────────────────────────────────
@@ -888,15 +890,15 @@ async function doLogin() {
   const err   = $('login-err');
   err.style.display='none';
   $('btn-login').disabled = true;
-  $('btn-login').textContent = 'Ingresando...';
+  $('btn-login').textContent = 'Conectando Firebase...';
   try {
+    $('btn-login').textContent = 'Autenticando...';
     const cred = await auth.signInWithEmailAndPassword(email, pass);
-    // Buscar perfil en Firestore
+    $('btn-login').textContent = 'Cargando perfil...';
     let snap = await db.collection('usuarios').doc(cred.user.uid).get();
 
-    // Primera vez: si no existe el perfil, crearlo automáticamente
     if (!snap.exists) {
-      // Determinar nombre y roles según el email
+      $('btn-login').textContent = 'Creando perfil...';
       const perfiles = {
         'admin@demo.com':        { name:'Administrador', roles:['admin'] },
         'operador@demo.com':     { name:'Operador',      roles:['user'] },
@@ -916,14 +918,16 @@ async function doLogin() {
       await auth.signOut();
       return;
     }
+    $('btn-login').textContent = 'Cargando datos...';
     await loadAllData();
     await initDataIfNeeded();
     subscribeToData();
     bootApp(user);
   } catch(e) {
+    console.error('Login error:', e);
     err.textContent = e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found'
       ? 'Correo o contraseña incorrectos.'
-      : (e.message || 'Error al iniciar sesión.');
+      : ('Error: ' + (e.message || e.code || JSON.stringify(e)));
     err.style.display='block';
   } finally {
     $('btn-login').disabled = false;
@@ -1853,7 +1857,7 @@ function openPedidoWebModal() {
 }
 
 // ─────────────────────────────────────────────
-//  INIT — Firebase async startup
+//  INIT
 // ─────────────────────────────────────────────
 auth.onAuthStateChanged(async (firebaseUser) => {
   if (firebaseUser) {
