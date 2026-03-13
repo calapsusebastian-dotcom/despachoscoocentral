@@ -758,7 +758,7 @@
 <!-- ══════════════════════════════════════════
      JAVASCRIPT
 ══════════════════════════════════════════ -->
-<!-- Firebase compat -->
+<!-- Firebase Auth únicamente (no Firestore SDK) -->
 <script>
   firebase.initializeApp({
     apiKey: "AIzaSyAGNoYEy6ZOVmpein4lmSmRtEET_WzPsDs",
@@ -770,101 +770,179 @@
   });
 </script>
 <script>
-// Firebase scripts ya cargaron sincrónicamente desde <head>
+// Auth via SDK (no usa WebSockets)
 const auth = firebase.auth();
-const db   = firebase.firestore();
-// Forzar long polling (soluciona NS_BASE_STREAM_CLOSED en Firefox/algunos entornos)
-db.settings({ experimentalForceLongPolling: true, merge: true });
 
 // ─────────────────────────────────────────────
-//  FIREBASE HELPERS  (reemplazan localStorage)
+//  FIRESTORE REST API  (sin WebSockets)
+// ─────────────────────────────────────────────
+const FS_PROJECT = 'despachos-pro-c3294';
+const FS_BASE    = `https://firestore.googleapis.com/v1/projects/${FS_PROJECT}/databases/(default)/documents`;
+
+let _idToken = null;
+async function getToken() {
+  const user = auth.currentUser;
+  if (!user) throw new Error('No autenticado');
+  _idToken = await user.getIdToken();
+  return _idToken;
+}
+
+// Convertir valor JS a formato Firestore
+function toFsValue(v) {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (typeof v === 'boolean')  return { booleanValue: v };
+  if (typeof v === 'number')   return { doubleValue: v };
+  if (typeof v === 'string')   return { stringValue: v };
+  if (Array.isArray(v))        return { arrayValue: { values: v.map(toFsValue) } };
+  if (typeof v === 'object')   return { mapValue: { fields: objToFs(v) } };
+  return { stringValue: String(v) };
+}
+function objToFs(obj) {
+  const fields = {};
+  for (const k in obj) fields[k] = toFsValue(obj[k]);
+  return fields;
+}
+
+// Convertir valor Firestore a JS
+function fromFsValue(v) {
+  if (!v) return null;
+  if ('nullValue'    in v) return null;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue'  in v) return Number(v.doubleValue);
+  if ('stringValue'  in v) return v.stringValue;
+  if ('arrayValue'   in v) return (v.arrayValue.values||[]).map(fromFsValue);
+  if ('mapValue'     in v) return fsToObj(v.mapValue.fields||{});
+  return null;
+}
+function fsToObj(fields) {
+  const obj = {};
+  for (const k in fields) obj[k] = fromFsValue(fields[k]);
+  return obj;
+}
+
+// GET un documento
+async function fsGet(col, id) {
+  const token = await getToken();
+  const r = await fetch(`${FS_BASE}/${col}/${id}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (r.status === 404) return null;
+  const doc = await r.json();
+  if (!doc.fields) return null;
+  return { id, ...fsToObj(doc.fields) };
+}
+
+// SET (crear/reemplazar) un documento
+async function fsSet(col, id, data) {
+  const token = await getToken();
+  const url = `${FS_BASE}/${col}/${id}`;
+  await fetch(url + '?currentDocument.exists=false', {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: objToFs(data) })
+  }).catch(() => {}); // ignorar si ya existe
+  // PATCH para crear o reemplazar
+  const r = await fetch(url, {
+    method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: objToFs(data) })
+  });
+  return r.ok;
+}
+
+// DELETE un documento
+async function fsDel(col, id) {
+  const token = await getToken();
+  await fetch(`${FS_BASE}/${col}/${id}`, {
+    method: 'DELETE', headers: { Authorization: `Bearer ${token}` }
+  });
+}
+
+// LIST toda una colección
+async function fsList(col) {
+  const token = await getToken();
+  const docs = [];
+  let pageToken = null;
+  do {
+    const url = `${FS_BASE}/${col}?pageSize=300${pageToken ? '&pageToken='+pageToken : ''}`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await r.json();
+    (data.documents || []).forEach(doc => {
+      const id = doc.name.split('/').pop();
+      docs.push({ id, ...fsToObj(doc.fields||{}) });
+    });
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  return docs;
+}
+
+// ─────────────────────────────────────────────
+//  HELPERS DE APP  (igual que antes)
 // ─────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const uid = () => '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 function hasRole(r) { return (session.roles || [session.role || 'user']).includes(r); }
 function isAdmin()  { return hasRole('admin'); }
 
-// Cache local — se llena al arrancar y se mantiene sincronizado
 let _cache = { dp_pedidos: [], dp_productos: [], dp_users: [] };
-
-// Lee del cache local (síncrono, igual que antes)
 const get  = k => _cache[k] || [];
-// Escribe en Firestore + actualiza cache (async pero fire-and-forget para no romper flujo)
+
+const setDoc = async (col, docData) => {
+  const colName = { dp_pedidos:'pedidos', dp_productos:'productos', dp_users:'usuarios' }[col];
+  if (!colName) return;
+  _cache[col] = _cache[col] || [];
+  const idx = _cache[col].findIndex(d=>d.id===docData.id);
+  if (idx>=0) _cache[col][idx] = docData; else _cache[col].push(docData);
+  return fsSet(colName, docData.id, docData);
+};
+const delDoc = async (col, id) => {
+  const colName = { dp_pedidos:'pedidos', dp_productos:'productos', dp_users:'usuarios' }[col];
+  if (!colName) return;
+  _cache[col] = (_cache[col]||[]).filter(d=>d.id!==id);
+  return fsDel(colName, id);
+};
+// setS legacy — reescribe toda la colección (usado por pocos sitios)
 const setS = (k, v) => {
   _cache[k] = v;
   const col = { dp_pedidos:'pedidos', dp_productos:'productos', dp_users:'usuarios' }[k];
   if (!col) return;
-  // Borrar colección y reescribir (batch)
-  const batch = db.batch();
-  v.forEach(doc => {
-    const ref = db.collection(col).doc(doc.id);
-    batch.set(ref, doc);
-  });
-  // Borrar docs que ya no existen
-  db.collection(col).get().then(snap => {
-    const ids = v.map(d=>d.id);
-    const delBatch = db.batch();
-    let hasDel = false;
-    snap.docs.forEach(d => { if (!ids.includes(d.id)) { delBatch.delete(d.ref); hasDel=true; } });
-    if (hasDel) delBatch.commit();
-  });
-  batch.commit().catch(e => console.error('Firestore write error:', e));
+  v.forEach(doc => fsSet(col, doc.id, doc).catch(console.error));
 };
 
-// Guardar/actualizar UN solo documento (más eficiente que reescribir toda la colección)
-const setDoc = (col, docData) => {
-  const colName = { dp_pedidos:'pedidos', dp_productos:'productos', dp_users:'usuarios' }[col];
-  if (!colName) return;
-  return db.collection(colName).doc(docData.id).set(docData);
-};
-const delDoc = (col, id) => {
-  const colName = { dp_pedidos:'pedidos', dp_productos:'productos', dp_users:'usuarios' }[col];
-  if (!colName) return;
-  return db.collection(colName).doc(id).delete();
-};
-
-// Cargar todas las colecciones al inicio
 async function loadAllData() {
-  const [pedSnap, prodSnap, usrSnap] = await Promise.all([
-    db.collection('pedidos').orderBy('fecha','desc').get().catch(()=>({docs:[]})),
-    db.collection('productos').get().catch(()=>({docs:[]})),
-    db.collection('usuarios').get().catch(()=>({docs:[]})),
+  const [pedidos, productos, usuarios] = await Promise.all([
+    fsList('pedidos').catch(()=>[]),
+    fsList('productos').catch(()=>[]),
+    fsList('usuarios').catch(()=>[]),
   ]);
-  _cache.dp_pedidos   = pedSnap.docs.map(d=>d.data());
-  _cache.dp_productos = prodSnap.docs.map(d=>d.data());
-  _cache.dp_users     = usrSnap.docs.map(d=>d.data());
+  _cache.dp_pedidos   = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  _cache.dp_productos = productos;
+  _cache.dp_users     = usuarios;
 }
 
-// Suscripción en tiempo real a pedidos (actualiza UI automáticamente)
-let _unsubPedidos = null;
 function subscribeToData() {
-  if (_unsubPedidos) _unsubPedidos();
-  _unsubPedidos = db.collection('pedidos').orderBy('fecha','desc')
-    .onSnapshot(snap => {
-      _cache.dp_pedidos = snap.docs.map(d=>d.data());
-      if (session) { renderPedidos(); updateStats(); renderWeb(); }
-    });
-  db.collection('productos').onSnapshot(snap => {
-    _cache.dp_productos = snap.docs.map(d=>d.data());
-  });
-  db.collection('usuarios').onSnapshot(snap => {
-    _cache.dp_users = snap.docs.map(d=>d.data());
-  });
+  // Sin tiempo real (REST no soporta streaming) — recargar cada 30s
+  setInterval(async () => {
+    if (!session) return;
+    const pedidos = await fsList('pedidos').catch(()=>null);
+    if (pedidos) {
+      _cache.dp_pedidos = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+      renderPedidos(); updateStats(); renderWeb();
+    }
+  }, 30000);
 }
 
-// Seed inicial — corre DESPUÉS de autenticarse (ya tenemos permisos)
 async function initDataIfNeeded() {
   try {
-    const prodSnap = await db.collection('productos').limit(1).get();
-    if (prodSnap.empty) {
-      const prods = [
-        { id:'pr1', nombre:'Café Especial',       activo:true },
-        { id:'pr2', nombre:'Café Molido Premium', activo:true },
-        { id:'pr3', nombre:'Café en Grano',       activo:true },
-      ];
-      for (const p of prods) await db.collection('productos').doc(p.id).set(p);
+    const prods = await fsList('productos');
+    if (!prods.length) {
+      await Promise.all([
+        fsSet('productos','pr1',{id:'pr1',nombre:'Café Especial',activo:true}),
+        fsSet('productos','pr2',{id:'pr2',nombre:'Café Molido Premium',activo:true}),
+        fsSet('productos','pr3',{id:'pr3',nombre:'Café en Grano',activo:true}),
+      ]);
+      _cache.dp_productos = [{id:'pr1',nombre:'Café Especial',activo:true},{id:'pr2',nombre:'Café Molido Premium',activo:true},{id:'pr3',nombre:'Café en Grano',activo:true}];
     }
-  } catch(e) { console.warn('Seed productos skipped:', e); }
+  } catch(e) { console.warn('Seed skipped:', e); }
 }
 
 // ─────────────────────────────────────────────
@@ -905,16 +983,9 @@ async function doLogin() {
     const cred = await auth.signInWithEmailAndPassword(email, pass);
     $('btn-login').textContent = 'Cargando perfil...';
 
-    // Timeout de 10s para Firestore
-    const withTimeout = (promise, ms, msg) => Promise.race([
-      promise,
-      new Promise((_,reject) => setTimeout(() => reject(new Error(msg)), ms))
-    ]);
+    let userData = await fsGet('usuarios', cred.user.uid);
 
-    const docRef = db.collection('usuarios').doc(cred.user.uid);
-    let snap = await withTimeout(docRef.get(), 10000, 'Timeout leyendo Firestore — verifica las reglas de seguridad');
-
-    if (!snap.exists) {
+    if (!userData) {
       $('btn-login').textContent = 'Creando perfil...';
       const perfiles = {
         'admin@demo.com':        { name:'Administrador', roles:['admin'] },
@@ -923,13 +994,11 @@ async function doLogin() {
         'web@demo.com':          { name:'Web',           roles:['web'] },
       };
       const perfil = perfiles[email] || { name: email.split('@')[0], roles:['user'] };
-      const userData = { id: cred.user.uid, name: perfil.name, email, roles: perfil.roles, activo: true };
-      await docRef.set(userData);
-      // Usar los datos directamente sin segundo get
-      snap = { exists: true, data: () => userData };
+      userData = { id: cred.user.uid, name: perfil.name, email, roles: perfil.roles, activo: true };
+      await fsSet('usuarios', cred.user.uid, userData);
     }
 
-    const user = snap.data();
+    const user = userData;
     if (user.activo === false) {
       err.textContent='Esta cuenta está desactivada. Contacta al administrador.';
       err.style.display='block';
@@ -956,7 +1025,7 @@ async function doLogin() {
 function fillLogin(e,p) { $('l-email').value=e; $('l-pass').value=p; }
 
 async function doLogout() {
-  if (_unsubPedidos) { _unsubPedidos(); _unsubPedidos=null; }
+  _idToken = null;
   await auth.signOut();
   session = null;
   $('view-app').classList.remove('active');
@@ -1769,7 +1838,7 @@ async function saveUsuario() {
     if (editUserId) {
       // Actualizar perfil en Firestore
       const userData = { id:editUserId, name:nombre, email, roles, activo };
-      await db.collection('usuarios').doc(editUserId).update({ name:nombre, roles, activo });
+      await fsSet('usuarios', editUserId, {..._cache.dp_users.find(u=>u.id===editUserId), name:nombre, roles, activo});
       const idx = _cache.dp_users.findIndex(u=>u.id===editUserId);
       if (idx>=0) _cache.dp_users[idx] = {..._cache.dp_users[idx], ...userData};
       // Si es el usuario actual, actualizar sesión
@@ -1795,7 +1864,7 @@ async function saveUsuario() {
       const cred = await secondAuth.createUserWithEmailAndPassword(email, pass);
       await secondAuth.signOut();
       const userData = { id: cred.user.uid, name:nombre, email, roles, activo };
-      await db.collection('usuarios').doc(cred.user.uid).set(userData);
+      await fsSet('usuarios', cred.user.uid, userData);
       _cache.dp_users.push(userData);
       toast('✅ Usuario creado');
     }
@@ -1811,7 +1880,7 @@ async function saveUsuario() {
 async function deleteUsuario(id) {
   if (id===session.id) { toast('⚠️ No puedes eliminar tu propio usuario'); return; }
   if (!confirm('¿Eliminar este usuario?')) return;
-  await db.collection('usuarios').doc(id).delete();
+  await fsDel('usuarios', id);
   _cache.dp_users = _cache.dp_users.filter(u=>u.id!==id);
   renderUsuarios(); toast('🗑 Usuario eliminado');
 }
@@ -1881,9 +1950,8 @@ function startApp() {
   auth.onAuthStateChanged(async (firebaseUser) => {
     if (firebaseUser) {
       try {
-        const snap = await db.collection('usuarios').doc(firebaseUser.uid).get();
-        if (snap.exists) {
-          const user = snap.data();
+        const user = await fsGet('usuarios', firebaseUser.uid);
+        if (user) {
           if (user.activo === false) { await auth.signOut(); return; }
           await loadAllData();
           await initDataIfNeeded();
