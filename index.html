@@ -1241,11 +1241,26 @@ function openPedidoModal(id=null, origen=null) {
   }
   renderLineas();
 
+  // ── RESET completo — limpiar cualquier estado bloqueado anterior ──
+  ['p-fecha','p-tipo','p-nombre','p-cc','p-email','p-celular','p-ciudad',
+   'p-direccion','p-mediopago','p-orden','p-observacion','p-domicilio',
+   'p-factura','p-total','p-pedpag','p-estadop'].forEach(f => {
+    const el=$(f); if(!el) return;
+    el.disabled=false; el.style.opacity=''; el.style.cursor='';
+  });
+  document.querySelectorAll('#tbody-lineas input,#tbody-lineas select,#tbody-lineas button').forEach(el=>{
+    el.disabled=false; el.style.opacity=''; el.style.pointerEvents='';
+  });
+  const _btnAgregar = document.querySelector('[onclick="addLineaProducto()"]');
+  if (_btnAgregar) _btnAgregar.style.display='';
+  const _btnGuardar = document.querySelector('#modal-pedido .modal-footer .btn-accent');
+  if (_btnGuardar) _btnGuardar.style.display='';
+
   // Permisos de campos al editar
   const esOperador    = id && !isAdmin();
   const pedidoActual  = id ? get('dp_pedidos').find(x=>x.id===id) : null;
   const despachado    = pedidoActual?.estado === 'Despachado';
-  const congelado     = esOperador && despachado; // despachado → bloquear todo para no-admin
+  const congelado     = esOperador && despachado;
 
   // Campos siempre bloqueados para operador (fecha, factura, totales calculados)
   const camposBloqueados = ['p-fecha','p-factura','p-total','p-pedpag'];
