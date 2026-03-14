@@ -1057,6 +1057,8 @@ async function doLogin() {
       await auth.signOut();
       return;
     }
+    // Guardar sesión para arranque instantáneo la próxima vez
+    localStorage.setItem('dp_session_user', JSON.stringify(user));
     $('btn-login').textContent = 'Cargando datos...';
     await loadAllData();
     await initDataIfNeeded();
@@ -1080,6 +1082,7 @@ async function doLogout() {
   _idToken = null;
   _tokenExpiry = 0;
   localStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem('dp_session_user');
   await auth.signOut();
   session = null;
   $('view-app').classList.remove('active');
@@ -2146,13 +2149,40 @@ function startApp() {
   auth.onAuthStateChanged(async (firebaseUser) => {
     if (firebaseUser) {
       try {
+        // 1. Intentar sesión guardada en localStorage para arranque instantáneo
+        const cachedSession = localStorage.getItem('dp_session_user');
+        if (cachedSession) {
+          const cachedUser = JSON.parse(cachedSession);
+          if (cachedUser.id === firebaseUser.uid && cachedUser.activo !== false) {
+            // Mostrar app INMEDIATAMENTE con datos del cache
+            const hasCached = loadLocalCache();
+            bootApp(cachedUser);
+            // Luego refrescar datos de Firebase en segundo plano
+            fsGet('usuarios', firebaseUser.uid).then(freshUser => {
+              if (freshUser) {
+                localStorage.setItem('dp_session_user', JSON.stringify(freshUser));
+                loadAllData().then(() => {
+                  renderPedidos(); updateStats(); renderWeb();
+                  initDataIfNeeded();
+                  subscribeToData();
+                });
+              }
+            }).catch(console.error);
+            return;
+          }
+        }
+        // 2. Sin cache — cargar normalmente
         const user = await fsGet('usuarios', firebaseUser.uid);
         if (user) {
           if (user.activo === false) { await auth.signOut(); return; }
-          await loadAllData();
-          await initDataIfNeeded();
-          subscribeToData();
+          localStorage.setItem('dp_session_user', JSON.stringify(user));
+          loadLocalCache();
           bootApp(user);
+          loadAllData().then(() => {
+            renderPedidos(); updateStats(); renderWeb();
+            initDataIfNeeded();
+            subscribeToData();
+          });
           return;
         }
       } catch(e) { console.error('Session restore error:', e); }
