@@ -784,10 +784,15 @@ const FS_PROJECT = 'despachos-pro-c3294';
 const FS_BASE    = `https://firestore.googleapis.com/v1/projects/${FS_PROJECT}/databases/(default)/documents`;
 
 let _idToken = null;
+let _tokenExpiry = 0;
+
 async function getToken(userOverride) {
   const user = userOverride || auth.currentUser;
   if (!user) throw new Error('No autenticado');
-  _idToken = await user.getIdToken();
+  // Reusar token si no ha expirado (tokens duran 1 hora, renovar cada 55 min)
+  if (_idToken && Date.now() < _tokenExpiry) return _idToken;
+  _idToken = await user.getIdToken(true);
+  _tokenExpiry = Date.now() + 55 * 60 * 1000;
   return _idToken;
 }
 
@@ -891,12 +896,14 @@ const setDoc = async (col, docData) => {
   _cache[col] = _cache[col] || [];
   const idx = _cache[col].findIndex(d=>d.id===docData.id);
   if (idx>=0) _cache[col][idx] = docData; else _cache[col].push(docData);
+  saveLocalCache();
   return fsSet(colName, docData.id, docData);
 };
 const delDoc = async (col, id) => {
   const colName = { dp_pedidos:'pedidos', dp_productos:'productos', dp_users:'usuarios' }[col];
   if (!colName) return;
   _cache[col] = (_cache[col]||[]).filter(d=>d.id!==id);
+  saveLocalCache();
   return fsDel(colName, id);
 };
 // setS legacy — reescribe toda la colección (usado por pocos sitios)
@@ -907,29 +914,73 @@ const setS = (k, v) => {
   v.forEach(doc => fsSet(col, doc.id, doc).catch(console.error));
 };
 
+// Cache persistente en localStorage para arranque instantáneo
+const CACHE_KEY = 'dp_local_cache';
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+function saveLocalCache() {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      ts: Date.now(),
+      pedidos:   _cache.dp_pedidos,
+      productos: _cache.dp_productos,
+      usuarios:  _cache.dp_users,
+    }));
+  } catch(e) {}
+}
+
+function loadLocalCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (Date.now() - data.ts > CACHE_TTL) return false;
+    _cache.dp_pedidos   = data.pedidos   || [];
+    _cache.dp_productos = data.productos || [];
+    _cache.dp_users     = data.usuarios  || [];
+    return true;
+  } catch(e) { return false; }
+}
+
 async function loadAllData() {
-  const [pedidos, productos, usuarios, clientes] = await Promise.all([
+  // 1. Mostrar datos del cache local INMEDIATAMENTE si están frescos
+  const hasCached = loadLocalCache();
+  if (hasCached && session) {
+    renderPedidos(); updateStats(); renderWeb();
+  }
+
+  // 2. Cargar datos críticos en paralelo (sin clientes — se cargan bajo demanda)
+  const [pedidos, productos, usuarios] = await Promise.all([
     fsList('pedidos').catch(()=>[]),
     fsList('productos').catch(()=>[]),
     fsList('usuarios').catch(()=>[]),
-    fsList('clientes').catch(()=>[]),
   ]);
   _cache.dp_pedidos   = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
   _cache.dp_productos = productos;
   _cache.dp_users     = usuarios;
-  _cache.dp_clientes  = clientes;
+
+  // 3. Guardar en cache local para la próxima vez
+  saveLocalCache();
+
+  // 4. Cargar clientes en segundo plano (no bloquea el arranque)
+  fsList('clientes').then(c => { _cache.dp_clientes = c; }).catch(()=>{});
 }
 
 function subscribeToData() {
-  // Sin tiempo real (REST no soporta streaming) — recargar cada 30s
+  // Sync liviano cada 60s — solo pedidos, no toda la colección
+  let lastSync = Date.now();
   setInterval(async () => {
     if (!session) return;
+    // Solo sincronizar si la pestaña está activa
+    if (document.hidden) return;
     const pedidos = await fsList('pedidos').catch(()=>null);
     if (pedidos) {
       _cache.dp_pedidos = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+      saveLocalCache();
       renderPedidos(); updateStats(); renderWeb();
+      lastSync = Date.now();
     }
-  }, 30000);
+  }, 15000);
 }
 
 async function initDataIfNeeded() {
@@ -1027,6 +1078,8 @@ function fillLogin(e,p) { $('l-email').value=e; $('l-pass').value=p; }
 
 async function doLogout() {
   _idToken = null;
+  _tokenExpiry = 0;
+  localStorage.removeItem(CACHE_KEY);
   await auth.signOut();
   session = null;
   $('view-app').classList.remove('active');
