@@ -1799,37 +1799,73 @@ function saveDespacho() {
 //  EXPORTAR EXCEL
 // ─────────────────────────────────────────────
 function exportExcel() {
-  const rows = [];
-  get('dp_pedidos').forEach(p => {
+  const pedidos = get('dp_pedidos');
+
+  // Columnas que se combinan por pedido (datos del cliente + totales)
+  const colsMerge = [0,1,2,3,4,5,6,7,13,14,15,16,17,18,19,20]; // índices de columnas a mergear
+
+  const headers = [
+    'Fecha Pedido','Tipo Persona','Nombre / Razón Social','C.C. / NIT','Email','Celular',
+    'Dirección Entrega','Ciudad',
+    'Producto','Tipo Molienda','Unidades','Precio Unitario ($)','Subtotal ($)',
+    'Total Envío ($)','Valor Total ($)','No. Factura','No. Orden','Medio de Pago','Observaciones','Estado','Registrado por'
+  ];
+
+  const data = [headers];
+  const merges = []; // celdas a combinar
+  let rowIdx = 1; // fila actual (0 = headers)
+
+  pedidos.forEach(p => {
     const lineasData = (p.lineas && p.lineas.length) ? p.lineas
       : [{producto:p.producto, molienda:p.molienda||'', cantidad:1, precioUnit:p.pedidoPagina||0, subtotal:p.pedidoPagina||0}];
+    const nLineas = lineasData.length;
+
     lineasData.forEach((l, i) => {
-      rows.push({
-        'Fecha Pedido':       i===0 ? fmtDate(p.fecha) : '',
-        'Tipo Persona':       i===0 ? p.tipo : '',
-        'Nombre / Razón Social': i===0 ? p.nombre : '',
-        'C.C. / NIT':         i===0 ? p.cc : '',
-        'Email':              i===0 ? p.email : '',
-        'Celular':            i===0 ? p.celular : '',
-        'Dirección Entrega':  i===0 ? p.direccion : '',
-        'Ciudad':             i===0 ? p.ciudad : '',
-        'Producto / Grano':   l.producto,
-        'Tipo Molienda':      l.molienda||'Grano entero',
-        'Unidades':           l.cantidad||1,
-        'Precio Unitario ($)':l.precioUnit||0,
-        'Subtotal ($)':       l.subtotal||0,
-        'Total Envío ($)':    i===0 ? p.domicilio : '',
-        'Valor Total ($)':    i===0 ? p.valorTotal : '',
-        'No. Factura':        i===0 ? p.factura : '',
-        'No. Orden':          i===0 ? p.orden||'' : '',
-        'Medio de Pago':      i===0 ? p.medioPago||'' : '',
-        'Observaciones':      i===0 ? p.observacion||'' : '',
-        'Estado':             i===0 ? p.estado : '',
-        'Registrado por':     i===0 ? p.creadoPor : '',
-      });
+      data.push([
+        i===0 ? fmtDate(p.fecha)    : '',
+        i===0 ? p.tipo              : '',
+        i===0 ? p.nombre            : '',
+        i===0 ? p.cc                : '',
+        i===0 ? p.email             : '',
+        i===0 ? p.celular           : '',
+        i===0 ? p.direccion         : '',
+        i===0 ? p.ciudad            : '',
+        l.producto                   || '',
+        l.molienda                   || 'Grano entero',
+        l.cantidad                   || 1,
+        l.precioUnit                 || 0,
+        l.subtotal                   || 0,
+        i===0 ? p.domicilio         : '',
+        i===0 ? p.valorTotal        : '',
+        i===0 ? (p.factura||'')     : '',
+        i===0 ? (p.orden||'')       : '',
+        i===0 ? (p.medioPago||'')   : '',
+        i===0 ? (p.observacion||'') : '',
+        i===0 ? p.estado            : '',
+        i===0 ? p.creadoPor         : '',
+      ]);
     });
+
+    // Agregar merges si hay más de una línea
+    if (nLineas > 1) {
+      colsMerge.forEach(c => {
+        merges.push({ s:{r:rowIdx, c}, e:{r:rowIdx+nLineas-1, c} });
+      });
+    }
+    rowIdx += nLineas;
   });
-  const ws = XLSX.utils.json_to_sheet(rows);
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!merges'] = merges;
+
+  // Estilos: ancho de columnas
+  ws['!cols'] = [
+    {wch:12},{wch:10},{wch:28},{wch:14},{wch:24},{wch:14},
+    {wch:30},{wch:12},
+    {wch:22},{wch:14},{wch:8},{wch:16},{wch:14},
+    {wch:14},{wch:14},{wch:12},{wch:12},{wch:16},{wch:28},{wch:12},{wch:16}
+  ];
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Pedidos');
   XLSX.writeFile(wb, `despachos_${new Date().toISOString().split('T')[0]}.xlsx`);
