@@ -1321,8 +1321,11 @@ function openPedidoModal(id=null, origen=null) {
   openPedidoModal._origen = esWeb ? 'web' : 'interno';
 
   const fields = ['p-fecha','p-tipo','p-nombre','p-cc','p-email','p-celular',
-                  'p-ciudad','p-direccion','p-domicilio','p-total','p-pedpag','p-factura','p-orden','p-observacion'];
+                  'p-ciudad','p-direccion','p-domicilio','p-total','p-pedpag','p-factura','p-orden'];
   fields.forEach(f => { if($(f)) $(f).value=''; });
+  // Reset explícito del textarea
+  const taObs = $('p-observacion');
+  if (taObs) { taObs.value = ''; taObs.removeAttribute('disabled'); taObs.style.opacity=''; taObs.style.cursor=''; }
   $('p-estadop').value = 'Pendiente';
   $('p-mediopago').value = 'Pendiente';
 
@@ -1459,7 +1462,7 @@ function savePedido() {
     valorTotal:   parseFloat($('p-total').value)||0 || subtotal + (parseFloat($('p-domicilio').value)||0),
     factura:      isAdmin() ? $('p-factura').value.trim()          : (original?.factura    || ''),
     orden:        $('p-orden').value.trim(),
-    observacion:  $('p-observacion').value.trim(),
+    observacion:  ($('p-observacion').value || $('p-observacion').textContent || '').trim(),
     medioPago:    $('p-mediopago').value,
     estado:       isAdmin() ? $('p-estadop').value                 : (original?.estado     || 'Pendiente'),
     creadoPor:    original?.creadoPor || session.name,
