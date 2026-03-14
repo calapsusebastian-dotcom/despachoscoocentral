@@ -553,8 +553,12 @@
               <option>Natural</option><option>Jurídica</option>
             </select>
           </div>
-          <div class="form-group full"><label>Nombre / Razón Social *</label><input type="text" id="p-nombre" placeholder="Nombre completo o razón social"/></div>
-          <div class="form-group"><label>C.C. / NIT *</label><input type="text" id="p-cc" placeholder="000000000"/></div>
+          <div class="form-group full" style="position:relative">
+            <label>Nombre / Razón Social *</label>
+            <input type="text" id="p-nombre" placeholder="Nombre completo o razón social" autocomplete="off" oninput="buscarCliente(this.value)" onblur="cerrarSugerencias()"/>
+            <div id="cliente-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1.5px solid var(--blue);border-radius:0 0 10px 10px;z-index:999;max-height:200px;overflow-y:auto;box-shadow:var(--shadow-md)"></div>
+          </div>
+          <div class="form-group"><label>C.C. / NIT *</label><input type="text" id="p-cc" placeholder="000000000" autocomplete="off" oninput="buscarClienteCC(this.value)"/></div>
           <div class="form-group"><label>Email</label><input type="email" id="p-email" placeholder="correo@ejemplo.com"/></div>
           <div class="form-group"><label>Celular *</label><input type="tel" id="p-celular" placeholder="300 000 0000"/></div>
           <div class="form-group"><label>Ciudad *</label><input type="text" id="p-ciudad" placeholder="Bogotá"/></div>
@@ -878,7 +882,7 @@ const uid = () => '_' + Date.now().toString(36) + Math.random().toString(36).sli
 function hasRole(r) { return (session.roles || [session.role || 'user']).includes(r); }
 function isAdmin()  { return hasRole('admin'); }
 
-let _cache = { dp_pedidos: [], dp_productos: [], dp_users: [] };
+let _cache = { dp_pedidos: [], dp_productos: [], dp_users: [], dp_clientes: [] };
 const get  = k => _cache[k] || [];
 
 const setDoc = async (col, docData) => {
@@ -904,14 +908,16 @@ const setS = (k, v) => {
 };
 
 async function loadAllData() {
-  const [pedidos, productos, usuarios] = await Promise.all([
+  const [pedidos, productos, usuarios, clientes] = await Promise.all([
     fsList('pedidos').catch(()=>[]),
     fsList('productos').catch(()=>[]),
     fsList('usuarios').catch(()=>[]),
+    fsList('clientes').catch(()=>[]),
   ]);
   _cache.dp_pedidos   = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
   _cache.dp_productos = productos;
   _cache.dp_users     = usuarios;
+  _cache.dp_clientes  = clientes;
 }
 
 function subscribeToData() {
@@ -1079,8 +1085,69 @@ function showPageDirect(page) {
 }
 
 // ─────────────────────────────────────────────
-//  PEDIDOS
+//  CLIENTES — autocompletado
 // ─────────────────────────────────────────────
+function buscarCliente(q) {
+  const box = $('cliente-suggestions');
+  if (!q || q.length < 2) { box.style.display='none'; return; }
+  const matches = _cache.dp_clientes.filter(c =>
+    c.nombre.toLowerCase().includes(q.toLowerCase()) ||
+    (c.cc||'').includes(q)
+  ).slice(0,6);
+  if (!matches.length) { box.style.display='none'; return; }
+  box.innerHTML = matches.map(c => `
+    <div onclick="llenarCliente('${c.id}')" style="padding:.7rem 1rem;cursor:pointer;border-bottom:1px solid var(--border);font-size:.85rem;transition:background .15s"
+      onmouseover="this.style.background='var(--blue-dim)'" onmouseout="this.style.background=''">
+      <div style="font-weight:600;color:var(--text)">${c.nombre}</div>
+      <div style="color:var(--muted);font-size:.78rem">${c.cc||''} · ${c.ciudad||''} · ${c.celular||''}</div>
+    </div>`).join('');
+  box.style.display='block';
+}
+
+function buscarClienteCC(q) {
+  if (!q || q.length < 3) return;
+  const match = _cache.dp_clientes.find(c => c.cc === q);
+  if (match) llenarCliente(match.id);
+}
+
+function llenarCliente(id) {
+  const c = _cache.dp_clientes.find(x=>x.id===id);
+  if (!c) return;
+  $('p-nombre').value   = c.nombre   || '';
+  $('p-cc').value       = c.cc       || '';
+  $('p-email').value    = c.email    || '';
+  $('p-celular').value  = c.celular  || '';
+  $('p-ciudad').value   = c.ciudad   || '';
+  $('p-direccion').value= c.direccion|| '';
+  $('cliente-suggestions').style.display='none';
+  toast('👤 Cliente cargado');
+}
+
+function cerrarSugerencias() {
+  setTimeout(()=>{ const b=$('cliente-suggestions'); if(b) b.style.display='none'; }, 200);
+}
+
+// Guardar/actualizar cliente al crear un pedido
+async function guardarCliente(pedido) {
+  if (!pedido.cc) return;
+  const clienteData = {
+    id:        'cli_' + pedido.cc.replace(/\W/g,''),
+    nombre:    pedido.nombre,
+    cc:        pedido.cc,
+    email:     pedido.email    || '',
+    celular:   pedido.celular  || '',
+    ciudad:    pedido.ciudad   || '',
+    direccion: pedido.direccion|| '',
+  };
+  // Actualizar cache local
+  const idx = _cache.dp_clientes.findIndex(c=>c.cc===pedido.cc);
+  if (idx>=0) _cache.dp_clientes[idx] = clienteData;
+  else _cache.dp_clientes.push(clienteData);
+  // Guardar en Firestore en segundo plano
+  fsSet('clientes', clienteData.id, clienteData).catch(console.error);
+}
+
+
 let editPedidoId = null;
 
 function calcTotal() {
@@ -1361,6 +1428,8 @@ function savePedido() {
 
   // 3. Guardar en Firebase en segundo plano
   setDoc('dp_pedidos', obj).catch(() => toast('⚠️ Error guardando en servidor'));
+  // 4. Guardar/actualizar cliente automáticamente
+  if (esNuevo) guardarCliente(obj);
 }
 
 function renderPedidos() {
