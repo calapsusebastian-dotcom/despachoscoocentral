@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CafeCoocentral</title>
+  <title>DespachosPro</title>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -1306,6 +1306,7 @@ function savePedido() {
   // Recalcular subtotal desde líneas (operador puede cambiar productos/precios)
   const subtotal = lineas.reduce((s,l)=>s+(l.subtotal||0),0);
 
+  const esNuevo = !editPedidoId;
   const obj = {
     id: editPedidoId || uid(),
     fecha:        isAdmin() ? $('p-fecha').value          : (original?.fecha        || $('p-fecha').value),
@@ -1330,18 +1331,21 @@ function savePedido() {
     origen:       original?.origen || openPedidoModal._origen || 'interno',
   };
 
-  if (editPedidoId) {
-    const idx = _cache.dp_pedidos.findIndex(p=>p.id===editPedidoId);
-    if (idx>=0) _cache.dp_pedidos[idx] = {..._cache.dp_pedidos[idx], ...obj};
-    setDoc('dp_pedidos', obj);
-    toast('✅ Pedido actualizado');
-  } else {
+  // 1. Actualizar cache local INMEDIATAMENTE
+  if (esNuevo) {
     _cache.dp_pedidos.unshift(obj);
-    setDoc('dp_pedidos', obj);
-    toast('✅ Pedido creado');
+  } else {
+    const idx = _cache.dp_pedidos.findIndex(p=>p.id===obj.id);
+    if (idx>=0) _cache.dp_pedidos[idx] = obj;
   }
+
+  // 2. Cerrar modal y renderizar SIN esperar Firebase
   closeModal('modal-pedido');
   renderPedidos(); updateStats();
+  toast(esNuevo ? '✅ Pedido creado' : '✅ Pedido actualizado');
+
+  // 3. Guardar en Firebase en segundo plano
+  setDoc('dp_pedidos', obj).catch(() => toast('⚠️ Error guardando en servidor'));
 }
 
 function renderPedidos() {
@@ -1500,8 +1504,10 @@ function verPedido(id) {
 function deletePedido(id) {
   if (!confirm('¿Eliminar este pedido? Esta acción no se puede deshacer.')) return;
   _cache.dp_pedidos = _cache.dp_pedidos.filter(p=>p.id!==id);
-  delDoc('dp_pedidos', id);
-  closeModal('modal-ver'); renderPedidos(); updateStats(); toast('🗑 Pedido eliminado');
+  closeModal('modal-ver');
+  renderPedidos(); updateStats();
+  toast('🗑 Pedido eliminado');
+  delDoc('dp_pedidos', id).catch(() => toast('⚠️ Error eliminando'));
 }
 
 // ─────────────────────────────────────────────
@@ -1613,11 +1619,14 @@ function openFacturaModal(id) {
 function saveFactura() {
   const factura = $('fac-numero').value.trim();
   const p = _cache.dp_pedidos.find(x=>x.id===editFacturaId);
-  if (p) { p.factura = factura; setDoc('dp_pedidos', p); }
-  closeModal('modal-factura');
-  renderPedidos();
-  toast('✅ Factura actualizada');
-  setTimeout(() => verPedido(editFacturaId), 300);
+  if (p) {
+    p.factura = factura;
+    closeModal('modal-factura');
+    renderPedidos();
+    toast('✅ Factura actualizada');
+    setTimeout(() => verPedido(editFacturaId), 200);
+    setDoc('dp_pedidos', p).catch(() => toast('⚠️ Error guardando en servidor'));
+  }
 }
 let despachandoId = null;
 
@@ -1638,12 +1647,12 @@ function saveDespacho() {
     p.estado        = 'Despachado';
     p.guia          = guia;
     p.fechaDespacho = $('d-fecha').value;
-    setDoc('dp_pedidos', p);
+    closeModal('modal-despachar');
+    renderPedidos(); updateStats();
+    toast('🚚 Pedido marcado como despachado');
+    setTimeout(() => verPedido(despachandoId), 200);
+    setDoc('dp_pedidos', p).catch(() => toast('⚠️ Error guardando en servidor'));
   }
-  closeModal('modal-despachar');
-  renderPedidos(); updateStats();
-  toast('🚚 Pedido marcado como despachado');
-  setTimeout(() => verPedido(despachandoId), 300);
 }
 
 // ─────────────────────────────────────────────
@@ -1726,29 +1735,38 @@ function saveProducto() {
   if (!nombre) { toast('⚠️ Ingresa el nombre del producto'); return; }
   if (editProdId) {
     const p = _cache.dp_productos.find(x=>x.id===editProdId);
-    if (p) { p.nombre = nombre; setDoc('dp_productos', p); }
-    toast('✅ Producto actualizado');
+    if (p) {
+      p.nombre = nombre;
+      closeModal('modal-producto');
+      renderProductos();
+      toast('✅ Producto actualizado');
+      setDoc('dp_productos', p).catch(() => toast('⚠️ Error guardando'));
+    }
   } else {
     const p = {id:uid(), nombre, activo:true};
     _cache.dp_productos.push(p);
-    setDoc('dp_productos', p);
+    closeModal('modal-producto');
+    renderProductos();
     toast('✅ Producto guardado');
+    setDoc('dp_productos', p).catch(() => toast('⚠️ Error guardando'));
   }
-  closeModal('modal-producto');
-  renderProductos();
 }
 
 function toggleProducto(id) {
   const p = _cache.dp_productos.find(x=>x.id===id);
-  if (p) { p.activo=!p.activo; setDoc('dp_productos', p); }
-  renderProductos();
+  if (p) {
+    p.activo=!p.activo;
+    renderProductos();
+    setDoc('dp_productos', p).catch(() => toast('⚠️ Error guardando'));
+  }
 }
 
 function deleteProducto(id) {
   if (!confirm('¿Eliminar este producto?')) return;
   _cache.dp_productos = _cache.dp_productos.filter(p=>p.id!==id);
-  delDoc('dp_productos', id);
-  renderProductos(); toast('🗑 Producto eliminado');
+  renderProductos();
+  toast('🗑 Producto eliminado');
+  delDoc('dp_productos', id).catch(() => toast('⚠️ Error eliminando'));
 }
 
 // ─────────────────────────────────────────────
