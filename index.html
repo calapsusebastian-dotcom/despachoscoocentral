@@ -837,20 +837,10 @@
   });
 </script>
 <script>
-// auth y db se asignan cuando Firebase carga
-let auth, db;
-document.addEventListener('firebase-ready', () => {
-  auth = window.auth;
-  db   = window.db;
-  startApp();
-});
-
-// Auth via SDK (no usa WebSockets)
-const auth = firebase.auth();
-
 // ─────────────────────────────────────────────
 //  FIRESTORE REST API  (sin WebSockets)
 // ─────────────────────────────────────────────
+const auth = firebase.auth();
 const FS_PROJECT = 'despachos-pro-c3294';
 const FS_BASE    = `https://firestore.googleapis.com/v1/projects/${FS_PROJECT}/databases/(default)/documents`;
 
