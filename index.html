@@ -228,6 +228,7 @@
     .badge-admin      { background:rgba(37,99,235,.1);    color:var(--blue); }
     .badge-facturadora{ background:rgba(16,185,129,.1);   color:#059669; }
     .badge-web        { background:rgba(99,102,241,.1);   color:#6366f1; }
+    .badge-vendedora  { background:rgba(234,88,12,.1);    color:#ea580c; }
     .badge-user       { background:rgba(139,92,246,.1);   color:var(--purple); }
 
     /* ═══ MODAL ═══ */
@@ -363,6 +364,7 @@
         <span class="chip" onclick="fillLogin('operador@demo.com','oper123')">👤 Operador</span>
         <span class="chip" onclick="fillLogin('facturadora@demo.com','fact123')">🧾 Facturadora</span>
         <span class="chip" onclick="fillLogin('web@demo.com','web123')">🌐 Web</span>
+        <span class="chip" onclick="fillLogin('vendedora@demo.com','vend123')">🗺️ Vendedora</span>
       </div>
     </div>
   </div>
@@ -381,6 +383,7 @@
     </div>
     <nav>
       <div class="nav-item active" id="nav-pedidos" onclick="showPage('pedidos',this)"><span class="ico">📋</span> Pedidos</div>
+      <div class="nav-item" id="nav-rutas" onclick="showPage('rutas',this)" style="display:none"><span class="ico">🗺️</span> Rutas</div>
       <div class="nav-item" id="nav-web" onclick="showPage('web',this)" style="display:none"><span class="ico">🌐</span> Página Web</div>
       <div class="nav-item" id="nav-productos" onclick="showPage('productos',this)" style="display:none"><span class="ico">🛒</span> Productos</div>
       <div class="nav-item" id="nav-usuarios" onclick="showPage('usuarios',this)" style="display:none"><span class="ico">👥</span> Usuarios</div>
@@ -446,6 +449,56 @@
             <div class="eico">📭</div><p>No hay pedidos que mostrar</p>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ── PAGE RUTAS ── -->
+    <div id="page-rutas" style="display:none">
+      <div class="topbar">
+        <div class="page-title">🗺️ Rutas</div>
+        <div class="topbar-actions" id="btn-nueva-ruta-wrap">
+          <button class="btn btn-accent" onclick="openNuevaRutaModal()">+ Nueva Ruta</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="stats">
+          <div class="stat-card c-blue"><div class="stat-ico">🗺️</div><div class="stat-label">Total rutas</div><div class="stat-val" id="sr-total">0</div></div>
+          <div class="stat-card c-warn"><div class="stat-ico">⏳</div><div class="stat-label">En progreso</div><div class="stat-val" id="sr-activas">0</div></div>
+          <div class="stat-card c-ok"><div class="stat-ico">✅</div><div class="stat-label">Terminadas</div><div class="stat-val" id="sr-term">0</div></div>
+          <div class="stat-card c-purple"><div class="stat-ico">💰</div><div class="stat-label">Total ventas</div><div class="stat-val" id="sr-ventas">$0</div></div>
+        </div>
+        <div id="rutas-lista" style="display:flex;flex-direction:column;gap:1rem;margin-top:1rem"></div>
+        <div class="empty" id="empty-rutas" style="display:none"><div class="eico">🗺️</div><p>No hay rutas — clic en "+ Nueva Ruta"</p></div>
+      </div>
+    </div>
+
+    <!-- Modal Nueva Ruta -->
+    <div class="overlay" id="modal-nueva-ruta">
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header"><div class="modal-title">🗺️ Nueva Ruta</div><button class="modal-close" onclick="closeModal('modal-nueva-ruta')">✕</button></div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Nombre de la ruta *</label>
+            <input type="text" id="ruta-nombre" placeholder="Ej: Garzón, Pitalito, Zona Norte..."/>
+          </div>
+          <div id="ruta-err" class="err-msg" style="display:none"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="closeModal('modal-nueva-ruta')">Cancelar</button>
+          <button class="btn btn-accent" onclick="crearRuta()">Crear Ruta</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Ver Ruta (pedidos de la ruta) -->
+    <div class="overlay" id="modal-ver-ruta">
+      <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
+        <div class="modal-header">
+          <div class="modal-title" id="ver-ruta-title">Ruta</div>
+          <button class="modal-close" onclick="closeModal('modal-ver-ruta')">✕</button>
+        </div>
+        <div class="modal-body" id="ver-ruta-body"></div>
+        <div class="modal-footer" id="ver-ruta-footer"></div>
       </div>
     </div>
 
@@ -563,6 +616,12 @@
           <div class="form-group"><label>Celular *</label><input type="tel" id="p-celular" placeholder="300 000 0000"/></div>
           <div class="form-group"><label>Ciudad *</label><input type="text" id="p-ciudad" placeholder="Bogotá"/></div>
           <div class="form-group full"><label>Dirección de Entrega *</label><input type="text" id="p-direccion" placeholder="Calle, Carrera, Barrio..."/></div>
+          <div class="form-group" id="p-ruta-group" style="display:none">
+            <label>Ruta</label>
+            <select id="p-ruta">
+              <option value="">— Sin ruta —</option>
+            </select>
+          </div>
           <div class="form-group">
             <label>Medio de Pago</label>
             <select id="p-mediopago">
@@ -690,6 +749,10 @@
           <label style="display:flex;align-items:center;gap:.7rem;cursor:pointer;text-transform:none;font-size:.88rem;color:var(--text);font-weight:500;letter-spacing:0">
             <input type="checkbox" id="rol-web" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer"/>
             <span>🌐 <strong>Página Web</strong> — crea y ve solo pedidos web</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:.7rem;cursor:pointer;text-transform:none;font-size:.88rem;color:var(--text);font-weight:500;letter-spacing:0">
+            <input type="checkbox" id="rol-vendedora" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer"/>
+            <span>🗺️ <strong>Vendedora</strong> — crea y gestiona rutas de venta</span>
           </label>
         </div>
       </div>
@@ -887,7 +950,7 @@ const uid = () => '_' + Date.now().toString(36) + Math.random().toString(36).sli
 function hasRole(r) { return (session.roles || [session.role || 'user']).includes(r); }
 function isAdmin()  { return hasRole('admin'); }
 
-let _cache = { dp_pedidos: [], dp_productos: [], dp_users: [], dp_clientes: [] };
+let _cache = { dp_pedidos: [], dp_productos: [], dp_users: [], dp_clientes: [], dp_rutas: [] };
 const get  = k => _cache[k] || [];
 
 const setDoc = async (col, docData) => {
@@ -964,6 +1027,7 @@ async function loadAllData() {
 
   // 4. Cargar clientes en segundo plano (no bloquea el arranque)
   fsList('clientes').then(c => { _cache.dp_clientes = c; }).catch(()=>{});
+  fsList('rutas').then(r => { _cache.dp_rutas = r; if(session) renderRutas(); }).catch(()=>{});
 }
 
 function subscribeToData() {
@@ -1044,6 +1108,7 @@ async function doLogin() {
         'operador@demo.com':     { name:'Operador',      roles:['user'] },
         'facturadora@demo.com':  { name:'Facturadora',   roles:['facturadora'] },
         'web@demo.com':          { name:'Web',           roles:['web'] },
+        'vendedora@demo.com':    { name:'Vendedora',     roles:['vendedora'] },
       };
       const perfil = perfiles[email] || { name: email.split('@')[0], roles:['user'] };
       userData = { id: cred.user.uid, name: perfil.name, email, roles: perfil.roles, activo: true };
@@ -1098,7 +1163,7 @@ function bootApp(user) {
   $('view-login').style.display='none';
   $('view-app').classList.add('active');
   $('s-name').textContent  = user.name;
-  const roleNames = { admin:'👑 Admin', user:'👤 Operador', facturadora:'🧾 Facturadora', web:'🌐 Web' };
+  const roleNames = { admin:'👑 Admin', user:'👤 Operador', facturadora:'🧾 Facturadora', web:'🌐 Web', vendedora:'🗺️ Vendedora' };
   const rolesLabel = (session.roles||[]).map(r=>roleNames[r]||r).join(' · ');
   $('s-role').textContent  = rolesLabel || '👤 Operador';
   $('s-avatar').textContent = user.name[0].toUpperCase();
@@ -1106,14 +1171,16 @@ function bootApp(user) {
   // Nav: mostrar secciones según roles (el admin siempre ve todo)
   $('nav-productos').style.display = isAdmin() ? 'flex' : 'none';
   $('nav-usuarios').style.display  = isAdmin() ? 'flex' : 'none';
-  // Tab Web en sidebar: solo si tiene rol web Y no es admin (admin usa los tabs internos)
   $('nav-web').style.display       = hasRole('web') && !isAdmin() ? 'flex' : 'none';
-  // Tabs Pedidos / Página Web dentro del panel (solo admin)
+  $('nav-rutas').style.display     = (hasRole('vendedora') || isAdmin() || hasRole('facturadora')) ? 'flex' : 'none';
   $('admin-tabs').style.display    = isAdmin() ? 'flex' : 'none';
 
-  // Arrancar en la página correcta según rol principal
-  if (hasRole('web') && !isAdmin() && !hasRole('user') && !hasRole('facturadora')) {
-    // Solo web puro → ir directo a página web
+  // Vendedora pura → arrancar en rutas
+  if (hasRole('vendedora') && !isAdmin() && !hasRole('user') && !hasRole('facturadora')) {
+    showPageDirect('rutas');
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    $('nav-rutas').classList.add('active');
+  } else if (hasRole('web') && !isAdmin() && !hasRole('user') && !hasRole('facturadora')) {
     showPageDirect('web');
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
     $('nav-web').classList.add('active');
@@ -1132,12 +1199,13 @@ function showPage(page, el) {
   el.classList.add('active');
 }
 function showPageDirect(page) {
-  ['pedidos','web','productos','usuarios'].forEach(p => {
+  ['pedidos','web','rutas','productos','usuarios'].forEach(p => {
     $(  'page-'+p).style.display = p===page?'':'none';
   });
   if (page==='productos') renderProductos();
   if (page==='usuarios')  renderUsuarios();
   if (page==='web')       renderWeb();
+  if (page==='rutas')     renderRutas();
 }
 
 // ─────────────────────────────────────────────
@@ -1332,6 +1400,15 @@ function openPedidoModal(id=null, origen=null) {
   $('p-estadop').value = 'Pendiente';
   $('p-mediopago').value = 'Pendiente';
 
+  // Campo ruta: solo para vendedoras, solo en pedidos nuevos
+  const grupoRuta = $('p-ruta-group');
+  if (grupoRuta) {
+    const mostrarRuta = hasRole('vendedora') && !id;
+    grupoRuta.style.display = mostrarRuta ? '' : 'none';
+    if (mostrarRuta) actualizarSelectorRutas();
+    if ($('p-ruta')) $('p-ruta').value = '';
+  }
+
   // Selector de estado solo visible para admin
   $('estado-admin-group').style.display = isAdmin() ? '' : 'none';
 
@@ -1470,6 +1547,8 @@ function savePedido() {
     estado:       isAdmin() ? $('p-estadop').value                 : (original?.estado     || 'Pendiente'),
     creadoPor:    original?.creadoPor || session.name,
     origen:       original?.origen || openPedidoModal._origen || 'interno',
+    rutaId:       original?.rutaId || ($('p-ruta')?.value || ''),
+    rutaNombre:   original?.rutaNombre || (($('p-ruta')?.value) ? (get('dp_rutas')||[]).find(r=>r.id===$('p-ruta')?.value)?.nombre||'' : ''),
   };
 
   // 1. Actualizar cache local INMEDIATAMENTE
@@ -1489,6 +1568,8 @@ function savePedido() {
   setDoc('dp_pedidos', obj).catch(() => toast('⚠️ Error guardando en servidor'));
   // 4. Guardar/actualizar cliente automáticamente
   if (esNuevo) guardarCliente(obj);
+  // 5. Vincular a ruta si aplica
+  if (esNuevo && obj.rutaId) vincularPedidoARuta(obj.rutaId, obj.id, obj.valorTotal);
 }
 
 function renderPedidos() {
@@ -1620,6 +1701,7 @@ function verPedido(id) {
         <div class="detail-item"><div class="dl">No. Orden</div><div class="dv td-mono">${p.orden||'—'}</div></div>
         <div class="detail-item"><div class="dl">Medio de Pago</div><div class="dv">${p.medioPago||'—'}</div></div>
         <div class="detail-item"><div class="dl">Registrado por</div><div class="dv">${p.creadoPor||'—'}</div></div>
+        ${p.rutaNombre?`<div class="detail-item"><div class="dl">Ruta</div><div class="dv"><span style="background:rgba(234,88,12,.1);color:#ea580c;border-radius:6px;padding:.2rem .6rem;font-size:.78rem;font-weight:600">🗺️ ${p.rutaNombre}</span></div></div>`:''}
         ${p.observacion?`<div class="detail-item full"><div class="dl">Observaciones</div><div class="dv">${p.observacion}</div></div>`:''}
 
         ${p.guia ? `<div class="detail-item full"><div class="dl">🚚 Número de Guía</div><div class="dv td-mono" style="font-size:1rem;color:#2563eb">${p.guia}</div></div>` : ''}
@@ -1957,7 +2039,7 @@ function renderUsuarios() {
   const list = get('dp_users');
   const tbody = $('tbody-usuarios');
   tbody.innerHTML='';
-  const roleInfo = { admin:['badge-admin','👑 Admin'], user:['badge-user','👤 Operador'], facturadora:['badge-facturadora','🧾 Facturadora'], web:['badge-web','🌐 Web'] };
+  const roleInfo = { admin:['badge-admin','👑 Admin'], user:['badge-user','👤 Operador'], facturadora:['badge-facturadora','🧾 Facturadora'], web:['badge-web','🌐 Web'], vendedora:['badge-vendedora','🗺️ Vendedora'] };
   list.forEach(u=>{
     const isMe = u.id===session.id;
     const roles = u.roles || [u.role||'user'];
@@ -1985,7 +2067,7 @@ function openUsuarioModal() {
   editUserId = null;
   $('mu-title').textContent = 'Nuevo Usuario';
   $('u-nombre').value=''; $('u-email').value=''; $('u-pass').value='';
-  $('rol-admin').checked=false; $('rol-user').checked=false; $('rol-facturadora').checked=false; $('rol-web').checked=false;
+  $('rol-admin').checked=false; $('rol-user').checked=false; $('rol-facturadora').checked=false; $('rol-web').checked=false; $('rol-vendedora').checked=false;
   $('u-activo').checked=true;
   $('u-pass-group').style.display='flex';
   $('usr-err').style.display='none';
@@ -2004,6 +2086,7 @@ function openEditUsuario(id) {
   $('rol-user').checked        = roles.includes('user');
   $('rol-facturadora').checked = roles.includes('facturadora');
   $('rol-web').checked         = roles.includes('web');
+  $('rol-vendedora').checked    = roles.includes('vendedora');
   $('u-activo').checked = u.activo !== false;
   $('u-pass-group').style.display = 'flex';
   const lbl = $('u-pass-group').querySelector('label');
@@ -2024,6 +2107,7 @@ async function saveUsuario() {
   if ($('rol-user').checked)        roles.push('user');
   if ($('rol-facturadora').checked) roles.push('facturadora');
   if ($('rol-web').checked)         roles.push('web');
+  if ($('rol-vendedora').checked)    roles.push('vendedora');
 
   if (!nombre || !email) { err.textContent='Nombre y correo son obligatorios.'; err.style.display='block'; return; }
   if (roles.length===0)  { err.textContent='Selecciona al menos un rol.'; err.style.display='block'; return; }
@@ -2044,7 +2128,7 @@ async function saveUsuario() {
       if (editUserId===session.id) {
         session.name=nombre; session.email=email; session.roles=roles; session.activo=activo;
         $('s-name').textContent = nombre;
-        const roleNames = { admin:'👑 Admin', user:'👤 Operador', facturadora:'🧾 Facturadora', web:'🌐 Web' };
+        const roleNames = { admin:'👑 Admin', user:'👤 Operador', facturadora:'🧾 Facturadora', web:'🌐 Web', vendedora:'🗺️ Vendedora' };
         $('s-role').textContent = roles.map(r=>roleNames[r]||r).join(' · ');
         $('s-avatar').textContent = nombre[0].toUpperCase();
         $('nav-productos').style.display = isAdmin() ? 'flex' : 'none';
@@ -2085,8 +2169,177 @@ async function deleteUsuario(id) {
 }
 
 // ─────────────────────────────────────────────
-//  PÁGINA WEB
+//  RUTAS DE VENTA
 // ─────────────────────────────────────────────
+
+function renderRutas() {
+  const rutas = (get('dp_rutas') || []).filter(r =>
+    isAdmin() || hasRole('facturadora') ? true : r.creadoPor === session.name
+  );
+
+  $('btn-nueva-ruta-wrap').style.display = hasRole('vendedora') ? '' : 'none';
+  const lista = $('rutas-lista');
+  const empty = $('empty-rutas');
+  lista.innerHTML = '';
+
+  $('sr-total').textContent   = rutas.length;
+  $('sr-activas').textContent = rutas.filter(r=>r.estado==='activa').length;
+  $('sr-term').textContent    = rutas.filter(r=>r.estado==='terminada').length;
+  const totalVentas = rutas.filter(r=>r.estado==='terminada')
+    .reduce((s,r)=>s+(r.totalVentas||0),0);
+  $('sr-ventas').textContent  = '$'+totalVentas.toLocaleString('es-CO');
+
+  if (!rutas.length) { empty.style.display='block'; lista.style.display='none'; return; }
+  empty.style.display='none'; lista.style.display='flex';
+
+  rutas.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')).forEach(r => {
+    const nPedidos = (r.pedidosIds||[]).length;
+    const esActiva = r.estado === 'activa';
+    const card = document.createElement('div');
+    card.style.cssText='background:var(--card);border-radius:12px;padding:1.2rem 1.4rem;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;cursor:pointer';
+    card.onclick = () => verRuta(r.id);
+    card.innerHTML=`
+      <div style="display:flex;align-items:center;gap:1rem;flex:1;min-width:0">
+        <div style="width:44px;height:44px;border-radius:10px;background:${esActiva?'rgba(37,99,235,.1)':'rgba(16,185,129,.1)'};display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0">${esActiva?'⏳':'✅'}</div>
+        <div>
+          <div style="font-weight:700;font-size:1rem;color:var(--text)">${r.nombre}</div>
+          <div style="color:var(--muted);font-size:.8rem;margin-top:.2rem">
+            ${fmtDate(r.fecha)} · ${nPedidos} pedidos
+            ${r.creadoPor?`· <span style="color:var(--text2)">${r.creadoPor}</span>`:''}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.8rem">
+        <div style="text-align:right">
+          <div style="font-weight:700;color:var(--blue)">${fmtMoney(r.totalVentas||0)}</div>
+          <div style="font-size:.75rem;color:var(--muted)">${esActiva?'<span style="color:#f59e0b">En progreso</span>':'<span style="color:#10b981">Terminada</span>'}</div>
+        </div>
+        <span style="color:var(--muted);font-size:1.2rem">›</span>
+      </div>`;
+    lista.appendChild(card);
+  });
+}
+
+function openNuevaRutaModal() {
+  $('ruta-nombre').value='';
+  $('ruta-err').style.display='none';
+  openModal('modal-nueva-ruta');
+}
+
+function crearRuta() {
+  const nombre = $('ruta-nombre').value.trim();
+  const err    = $('ruta-err');
+  if (!nombre) { err.textContent='Ingresa el nombre de la ruta.'; err.style.display='block'; return; }
+  const ruta = {
+    id:         uid(),
+    nombre,
+    fecha:      new Date().toISOString().split('T')[0],
+    estado:     'activa',
+    creadoPor:  session.name,
+    pedidosIds: [],
+    totalVentas:0,
+  };
+  if (!_cache.dp_rutas) _cache.dp_rutas = [];
+  _cache.dp_rutas.unshift(ruta);
+  fsSet('rutas', ruta.id, ruta).catch(console.error);
+  closeModal('modal-nueva-ruta');
+  renderRutas();
+  actualizarSelectorRutas();
+  toast(`✅ Ruta "${nombre}" creada`);
+}
+
+function verRuta(id) {
+  const ruta = (get('dp_rutas')||[]).find(r=>r.id===id);
+  if (!ruta) return;
+  const pedidos = get('dp_pedidos').filter(p=>p.rutaId===id);
+  const esActiva = ruta.estado==='activa';
+  const esVendedora = hasRole('vendedora') && !isAdmin();
+
+  $('ver-ruta-title').textContent = `🗺️ ${ruta.nombre}`;
+
+  const body = $('ver-ruta-body');
+  body.innerHTML = `
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1.2rem">
+      <div style="background:var(--surface);border-radius:8px;padding:.6rem 1rem;font-size:.83rem"><span style="color:var(--muted)">Fecha:</span> <strong>${fmtDate(ruta.fecha)}</strong></div>
+      <div style="background:var(--surface);border-radius:8px;padding:.6rem 1rem;font-size:.83rem"><span style="color:var(--muted)">Pedidos:</span> <strong>${pedidos.length}</strong></div>
+      <div style="background:var(--surface);border-radius:8px;padding:.6rem 1rem;font-size:.83rem"><span style="color:var(--muted)">Total:</span> <strong style="color:var(--blue)">${fmtMoney(ruta.totalVentas||0)}</strong></div>
+      <div style="background:var(--surface);border-radius:8px;padding:.6rem 1rem;font-size:.83rem"><span style="color:var(--muted)">Creada por:</span> <strong>${ruta.creadoPor||'—'}</strong></div>
+    </div>
+    ${pedidos.length===0
+      ? `<div style="text-align:center;padding:2rem;color:var(--muted)">No hay pedidos en esta ruta aún.<br>${esActiva&&esVendedora?'<span style="font-size:.82rem">Crea pedidos y selecciona esta ruta en el formulario.</span>':''}</div>`
+      : `<div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Ciudad</th><th>Producto</th><th>Total</th><th>Estado</th></tr></thead><tbody>
+          ${pedidos.map(p=>`<tr style="cursor:pointer" onclick="closeModal('modal-ver-ruta');verPedido('${p.id}')">
+            <td class="td-name">${p.nombre}</td>
+            <td class="td-muted">${p.ciudad}</td>
+            <td style="font-size:.78rem;color:var(--text2)">${p.producto||'—'}</td>
+            <td style="font-weight:600;color:var(--blue)">${fmtMoney(p.valorTotal)}</td>
+            <td><span class="badge badge-${p.estado?.toLowerCase()}">${estadoIco(p.estado)} ${p.estado}</span></td>
+          </tr>`).join('')}
+        </tbody></table></div>`
+    }`;
+
+  $('ver-ruta-footer').innerHTML = `
+    <button class="btn btn-outline" onclick="closeModal('modal-ver-ruta')">Cerrar</button>
+    ${esActiva && esVendedora && pedidos.length > 0
+      ? `<button class="btn btn-accent" onclick="terminarRuta('${id}')">✅ Terminar Ruta</button>`
+      : ''}
+    ${isAdmin() && esActiva
+      ? `<button class="btn btn-danger" onclick="eliminarRuta('${id}')">🗑 Eliminar</button>`
+      : ''}`;
+
+  openModal('modal-ver-ruta');
+}
+
+function terminarRuta(id) {
+  if (!confirm('¿Terminar esta ruta? Los pedidos quedarán visibles para el admin y la facturadora.')) return;
+  const ruta = (get('dp_rutas')||[]).find(r=>r.id===id);
+  if (!ruta) return;
+  ruta.estado   = 'terminada';
+  ruta.fechaFin = new Date().toISOString().split('T')[0];
+  const idx = _cache.dp_rutas.findIndex(r=>r.id===id);
+  if (idx>=0) _cache.dp_rutas[idx] = ruta;
+  fsSet('rutas', ruta.id, ruta).catch(console.error);
+  closeModal('modal-ver-ruta');
+  renderRutas();
+  actualizarSelectorRutas();
+  toast(`🚀 Ruta "${ruta.nombre}" terminada`);
+}
+
+function eliminarRuta(id) {
+  if (!confirm('¿Eliminar esta ruta?')) return;
+  _cache.dp_rutas = (_cache.dp_rutas||[]).filter(r=>r.id!==id);
+  fsDel('rutas', id).catch(console.error);
+  closeModal('modal-ver-ruta');
+  renderRutas();
+  actualizarSelectorRutas();
+  toast('🗑 Ruta eliminada');
+}
+
+// Actualizar el selector de rutas en el formulario de pedido
+function actualizarSelectorRutas() {
+  const sel = $('p-ruta');
+  if (!sel) return;
+  const rutasActivas = (get('dp_rutas')||[]).filter(r =>
+    r.estado==='activa' && r.creadoPor===session.name
+  );
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="">— Sin ruta —</option>' +
+    rutasActivas.map(r=>`<option value="${r.id}" ${r.id===currentVal?'selected':''}>${r.nombre}</option>`).join('');
+}
+
+// Vincular pedido a ruta al guardar
+function vincularPedidoARuta(rutaId, pedidoId, valorTotal) {
+  if (!rutaId) return;
+  const ruta = (get('dp_rutas')||[]).find(r=>r.id===rutaId);
+  if (!ruta) return;
+  if (!ruta.pedidosIds) ruta.pedidosIds=[];
+  if (!ruta.pedidosIds.includes(pedidoId)) ruta.pedidosIds.push(pedidoId);
+  ruta.totalVentas = (ruta.totalVentas||0) + (valorTotal||0);
+  const idx = _cache.dp_rutas.findIndex(r=>r.id===rutaId);
+  if (idx>=0) _cache.dp_rutas[idx] = ruta;
+  fsSet('rutas', ruta.id, ruta).catch(console.error);
+}
+
 let currentTab = 'pedidos'; // 'pedidos' | 'web'
 
 function switchTab(tab) {
