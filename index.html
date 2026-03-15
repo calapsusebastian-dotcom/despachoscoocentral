@@ -1385,7 +1385,7 @@ function calcTotal() {
 function onProductoChange() {}
 function loadProductosOpts() {}
 
-function openPedidoModal(id=null, origen=null) {
+function openPedidoModal(id=null, origen=null, rutaIdPresel=null) {
   editPedidoId = id;
   const esWeb = origen==='web' || (!id && hasRole('web') && !isAdmin() && !hasRole('user'));
   $('mp-title').textContent = esWeb ? (id?'Editar Pedido Web':'Nuevo Pedido — Página Web') : (id?'Editar Pedido':'Nuevo Pedido');
@@ -1400,14 +1400,18 @@ function openPedidoModal(id=null, origen=null) {
   $('p-estadop').value = 'Pendiente';
   $('p-mediopago').value = 'Pendiente';
 
-  // Campo ruta: solo para vendedoras, solo en pedidos nuevos
+  // Campo ruta: solo visible cuando se abre desde el contexto de una ruta
   const grupoRuta = $('p-ruta-group');
   if (grupoRuta) {
-    const mostrarRuta = hasRole('vendedora') && !id;
+    const mostrarRuta = !!rutaIdPresel;
     grupoRuta.style.display = mostrarRuta ? '' : 'none';
-    if (mostrarRuta) actualizarSelectorRutas();
-    if ($('p-ruta')) $('p-ruta').value = '';
+    if (mostrarRuta) {
+      actualizarSelectorRutas();
+      setTimeout(() => { if ($('p-ruta')) $('p-ruta').value = rutaIdPresel; }, 50);
+    }
+    if ($('p-ruta') && !mostrarRuta) $('p-ruta').value = '';
   }
+  openPedidoModal._rutaId = rutaIdPresel || '';
 
   // Selector de estado solo visible para admin
   $('estado-admin-group').style.display = isAdmin() ? '' : 'none';
@@ -1547,8 +1551,8 @@ function savePedido() {
     estado:       isAdmin() ? $('p-estadop').value                 : (original?.estado     || 'Pendiente'),
     creadoPor:    original?.creadoPor || session.name,
     origen:       original?.origen || openPedidoModal._origen || 'interno',
-    rutaId:       original?.rutaId || ($('p-ruta')?.value || ''),
-    rutaNombre:   original?.rutaNombre || (($('p-ruta')?.value) ? (get('dp_rutas')||[]).find(r=>r.id===$('p-ruta')?.value)?.nombre||'' : ''),
+    rutaId:       original?.rutaId || openPedidoModal._rutaId || '',
+    rutaNombre:   original?.rutaNombre || ((openPedidoModal._rutaId) ? (get('dp_rutas')||[]).find(r=>r.id===openPedidoModal._rutaId)?.nombre||'' : ''),
   };
 
   // 1. Actualizar cache local INMEDIATAMENTE
@@ -1568,8 +1572,11 @@ function savePedido() {
   setDoc('dp_pedidos', obj).catch(() => toast('⚠️ Error guardando en servidor'));
   // 4. Guardar/actualizar cliente automáticamente
   if (esNuevo) guardarCliente(obj);
-  // 5. Vincular a ruta si aplica
-  if (esNuevo && obj.rutaId) vincularPedidoARuta(obj.rutaId, obj.id, obj.valorTotal);
+  // 5. Vincular a ruta si aplica y reabrir modal de ruta
+  if (esNuevo && obj.rutaId) {
+    vincularPedidoARuta(obj.rutaId, obj.id, obj.valorTotal);
+    setTimeout(() => verRuta(obj.rutaId), 200);
+  }
 }
 
 function renderPedidos() {
@@ -2280,8 +2287,9 @@ function verRuta(id) {
 
   $('ver-ruta-footer').innerHTML = `
     <button class="btn btn-outline" onclick="closeModal('modal-ver-ruta')">Cerrar</button>
-    ${esActiva && esVendedora && pedidos.length > 0
-      ? `<button class="btn btn-accent" onclick="terminarRuta('${id}')">✅ Terminar Ruta</button>`
+    ${esActiva && esVendedora
+      ? `<button class="btn btn-outline" onclick="abrirPedidoEnRuta('${id}')">+ Agregar Pedido</button>
+         <button class="btn btn-accent" onclick="terminarRuta('${id}')" ${pedidos.length===0?'disabled title="Agrega al menos un pedido"':''}>✅ Terminar Ruta</button>`
       : ''}
     ${isAdmin() && esActiva
       ? `<button class="btn btn-danger" onclick="eliminarRuta('${id}')">🗑 Eliminar</button>`
@@ -2290,7 +2298,12 @@ function verRuta(id) {
   openModal('modal-ver-ruta');
 }
 
-function terminarRuta(id) {
+function abrirPedidoEnRuta(rutaId) {
+  closeModal('modal-ver-ruta');
+  openPedidoModal(null, null, rutaId);
+}
+
+
   if (!confirm('¿Terminar esta ruta? Los pedidos quedarán visibles para el admin y la facturadora.')) return;
   const ruta = (get('dp_rutas')||[]).find(r=>r.id===id);
   if (!ruta) return;
