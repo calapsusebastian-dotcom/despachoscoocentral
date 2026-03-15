@@ -2303,7 +2303,7 @@ function abrirPedidoEnRuta(rutaId) {
   openPedidoModal(null, null, rutaId);
 }
 
-
+function terminarRuta(id) {
   if (!confirm('¿Terminar esta ruta? Los pedidos quedarán visibles para el admin y la facturadora.')) return;
   const ruta = (get('dp_rutas')||[]).find(r=>r.id===id);
   if (!ruta) return;
