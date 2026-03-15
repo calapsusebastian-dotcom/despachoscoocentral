@@ -837,6 +837,14 @@
   });
 </script>
 <script>
+// auth y db se asignan cuando Firebase carga
+let auth, db;
+document.addEventListener('firebase-ready', () => {
+  auth = window.auth;
+  db   = window.db;
+  startApp();
+});
+
 // Auth via SDK (no usa WebSockets)
 const auth = firebase.auth();
 
@@ -1403,13 +1411,12 @@ function openPedidoModal(id=null, origen=null, rutaIdPresel=null) {
   // Campo ruta: solo visible cuando se abre desde el contexto de una ruta
   const grupoRuta = $('p-ruta-group');
   if (grupoRuta) {
-    const mostrarRuta = !!rutaIdPresel;
-    grupoRuta.style.display = mostrarRuta ? '' : 'none';
-    if (mostrarRuta) {
-      actualizarSelectorRutas();
-      setTimeout(() => { if ($('p-ruta')) $('p-ruta').value = rutaIdPresel; }, 50);
+    grupoRuta.style.display = rutaIdPresel ? '' : 'none';
+    if (rutaIdPresel) {
+      actualizarSelectorRutas(rutaIdPresel);
+    } else {
+      if ($('p-ruta')) $('p-ruta').value = '';
     }
-    if ($('p-ruta') && !mostrarRuta) $('p-ruta').value = '';
   }
   openPedidoModal._rutaId = rutaIdPresel || '';
 
@@ -2287,9 +2294,11 @@ function verRuta(id) {
 
   $('ver-ruta-footer').innerHTML = `
     <button class="btn btn-outline" onclick="closeModal('modal-ver-ruta')">Cerrar</button>
-    ${esActiva && esVendedora
-      ? `<button class="btn btn-outline" onclick="abrirPedidoEnRuta('${id}')">+ Agregar Pedido</button>
-         <button class="btn btn-accent" onclick="terminarRuta('${id}')" ${pedidos.length===0?'disabled title="Agrega al menos un pedido"':''}>✅ Terminar Ruta</button>`
+    ${esActiva && (esVendedora || isAdmin())
+      ? `<button class="btn btn-outline" onclick="abrirPedidoEnRuta('${id}')">+ Agregar Pedido</button>`
+      : ''}
+    ${esActiva && esVendedora && pedidos.length > 0
+      ? `<button class="btn btn-accent" onclick="terminarRuta('${id}')">✅ Terminar Ruta</button>`
       : ''}
     ${isAdmin() && esActiva
       ? `<button class="btn btn-danger" onclick="eliminarRuta('${id}')">🗑 Eliminar</button>`
@@ -2329,15 +2338,12 @@ function eliminarRuta(id) {
 }
 
 // Actualizar el selector de rutas en el formulario de pedido
-function actualizarSelectorRutas() {
+function actualizarSelectorRutas(preselect) {
   const sel = $('p-ruta');
   if (!sel) return;
-  const rutasActivas = (get('dp_rutas')||[]).filter(r =>
-    r.estado==='activa' && r.creadoPor===session.name
-  );
-  const currentVal = sel.value;
+  const rutasActivas = (get('dp_rutas')||[]).filter(r => r.estado==='activa');
   sel.innerHTML = '<option value="">— Sin ruta —</option>' +
-    rutasActivas.map(r=>`<option value="${r.id}" ${r.id===currentVal?'selected':''}>${r.nombre}</option>`).join('');
+    rutasActivas.map(r=>`<option value="${r.id}" ${r.id===preselect?'selected':''}>${r.nombre}</option>`).join('');
 }
 
 // Vincular pedido a ruta al guardar
