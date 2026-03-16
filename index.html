@@ -468,6 +468,19 @@
           <div class="stat-card c-ok"><div class="stat-ico">✅</div><div class="stat-label">Terminadas</div><div class="stat-val" id="sr-term">0</div></div>
           <div class="stat-card c-purple"><div class="stat-ico">💰</div><div class="stat-label">Total ventas</div><div class="stat-val" id="sr-ventas">$0</div></div>
         </div>
+        <div class="filters" style="margin-top:1rem">
+          <div class="search-wrap">
+            <span class="sico">🔍</span>
+            <input id="ruta-search" type="text" placeholder="Buscar por nombre de ruta..." oninput="renderRutas()"/>
+          </div>
+          <input type="date" id="ruta-fecha-desde" onchange="renderRutas()" class="filter-sel" style="background:var(--card);border:1.5px solid var(--border);border-radius:8px;padding:.6rem .85rem;color:var(--text);font-family:var(--font);font-size:.83rem;outline:none;" title="Desde"/>
+          <input type="date" id="ruta-fecha-hasta" onchange="renderRutas()" class="filter-sel" style="background:var(--card);border:1.5px solid var(--border);border-radius:8px;padding:.6rem .85rem;color:var(--text);font-family:var(--font);font-size:.83rem;outline:none;" title="Hasta"/>
+          <select id="ruta-estado-fil" onchange="renderRutas()" class="filter-sel" style="background:var(--card);border:1.5px solid var(--border);border-radius:8px;padding:.6rem .85rem;color:var(--text);font-family:var(--font);font-size:.83rem;outline:none;">
+            <option value="">Todos los estados</option>
+            <option value="activa">En progreso</option>
+            <option value="terminada">Terminadas</option>
+          </select>
+        </div>
         <div id="rutas-lista" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;margin-top:1rem"></div>
         <div class="empty" id="empty-rutas" style="display:none"><div class="eico">🗺️</div><p>No hay rutas — clic en "+ Nueva Ruta"</p></div>
       </div>
@@ -2204,9 +2217,25 @@ function renderRutas() {
   $('sr-ventas').textContent = '$'+totalVentas.toLocaleString('es-CO');
 
   if (!rutas.length) { empty.style.display='block'; lista.style.display='none'; return; }
+
+  // Aplicar filtros
+  const q         = ($('ruta-search')?.value||'').toLowerCase();
+  const desde     = $('ruta-fecha-desde')?.value||'';
+  const hasta     = $('ruta-fecha-hasta')?.value||'';
+  const estadoFil = $('ruta-estado-fil')?.value||'';
+
+  const filtradas = rutas.filter(r => {
+    if (q && !r.nombre.toLowerCase().includes(q)) return false;
+    if (desde && r.fecha < desde) return false;
+    if (hasta && r.fecha > hasta) return false;
+    if (estadoFil && r.estado !== estadoFil) return false;
+    return true;
+  });
+
+  if (!filtradas.length) { empty.style.display='block'; lista.style.display='none'; return; }
   empty.style.display='none'; lista.style.display='grid';
 
-  rutas.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')).forEach(r => {
+  filtradas.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')).forEach(r => {
     const nPedidos = (r.pedidosIds||[]).length;
     const esActiva = r.estado === 'activa';
     const card = document.createElement('div');
@@ -2280,13 +2309,14 @@ function verRuta(id) {
            ${esActiva ? 'No hay pedidos aún.<br><span style="font-size:.82rem">Usa el botón + Nuevo Pedido para agregar.</span>' : 'Esta ruta no tiene pedidos.'}
          </div>`
       : `<div class="table-wrap"><table>
-           <thead><tr><th>Cliente</th><th>Ciudad</th><th>Producto</th><th>Total</th><th>Estado</th></tr></thead>
+           <thead><tr><th>Cliente</th><th>Ciudad</th><th>Producto</th><th># Factura</th><th>Total</th><th>Estado</th></tr></thead>
            <tbody>
              ${pedidos.map(p=>`
                <tr style="cursor:pointer" onclick="closeModal('modal-ver-ruta');verPedido('${p.id}')">
                  <td class="td-name">${p.nombre}</td>
                  <td class="td-muted">${p.ciudad}</td>
                  <td style="font-size:.78rem;color:var(--text2)">${p.producto||'—'}</td>
+                 <td class="td-mono">${p.factura||'—'}</td>
                  <td style="font-weight:600;color:var(--blue)">${fmtMoney(p.valorTotal)}</td>
                  <td><span class="badge badge-${p.estado?.toLowerCase()}">${estadoIco(p.estado)} ${p.estado}</span></td>
                </tr>`).join('')}
