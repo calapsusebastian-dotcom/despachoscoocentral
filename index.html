@@ -954,14 +954,13 @@ async function fsList(col) {
   return docs;
 }
 
-// LIST pedidos con filtro de fecha (solo últimos N días) — reduce lecturas drásticamente
+// LIST pedidos con filtro de fecha — reduce lecturas drásticamente
 async function fsListPedidos(diasAtras = 60) {
   const token = await getToken();
   const fechaMin = new Date();
   fechaMin.setDate(fechaMin.getDate() - diasAtras);
-  const fechaMinStr = fechaMin.toISOString().split('T')[0]; // YYYY-MM-DD
+  const fechaMinStr = fechaMin.toISOString().split('T')[0];
 
-  // Usar RunQuery para filtrar por fecha — solo trae documentos que cumplen el filtro
   const query = {
     structuredQuery: {
       from: [{ collectionId: 'pedidos' }],
@@ -977,19 +976,33 @@ async function fsListPedidos(diasAtras = 60) {
     }
   };
 
-  const r = await fetch(`${FS_BASE.replace('/documents', '')}:runQuery`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(query)
-  });
-
-  const results = await r.json();
-  return (Array.isArray(results) ? results : [])
-    .filter(row => row.document)
-    .map(row => {
-      const id = row.document.name.split('/').pop();
-      return { id, ...fsToObj(row.document.fields||{}) };
+  try {
+    const r = await fetch(`${FS_BASE}:runQuery`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(query)
     });
+
+    if (!r.ok) throw new Error('runQuery failed: ' + r.status);
+
+    const results = await r.json();
+    const docs = (Array.isArray(results) ? results : [])
+      .filter(row => row.document)
+      .map(row => {
+        const id = row.document.name.split('/').pop();
+        return { id, ...fsToObj(row.document.fields||{}) };
+      });
+
+    // Si devuelve resultados vacíos pero hay pedidos en cache, usar fsList normal
+    if (docs.length === 0 && _cache.dp_pedidos.length > 0) {
+      console.warn('runQuery devolvió 0 resultados, usando fsList...');
+      return await fsList('pedidos');
+    }
+    return docs;
+  } catch(e) {
+    console.warn('runQuery error, usando fsList:', e);
+    return await fsList('pedidos');
+  }
 }
 
 // ─────────────────────────────────────────────
