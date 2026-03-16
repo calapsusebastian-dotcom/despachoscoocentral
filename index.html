@@ -990,8 +990,9 @@ const setS = (k, v) => {
 };
 
 // Cache persistente en localStorage para arranque instantáneo
-const CACHE_KEY = 'dp_local_cache';
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+const CACHE_KEY     = 'dp_local_cache';
+const CACHE_TTL     = 30 * 60 * 1000;  // 30 minutos para pedidos
+const CACHE_TTL_CFG = 24 * 60 * 60 * 1000; // 24h para productos y usuarios
 
 function saveLocalCache() {
   try {
@@ -1018,45 +1019,95 @@ function loadLocalCache() {
 }
 
 async function loadAllData() {
-  // 1. Mostrar datos del cache local INMEDIATAMENTE si están frescos
+  // 1. Mostrar cache local INMEDIATAMENTE
   const hasCached = loadLocalCache();
   if (hasCached && session) {
     renderPedidos(); updateStats(); renderWeb();
   }
 
-  // 2. Cargar datos críticos en paralelo (sin clientes — se cargan bajo demanda)
-  const [pedidos, productos, usuarios] = await Promise.all([
-    fsList('pedidos').catch(()=>[]),
-    fsList('productos').catch(()=>[]),
-    fsList('usuarios').catch(()=>[]),
-  ]);
-  _cache.dp_pedidos   = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
-  _cache.dp_productos = productos;
-  _cache.dp_users     = usuarios;
+  // 2. Siempre recargar pedidos (cambian frecuentemente)
+  const pedidos = await fsList('pedidos').catch(()=>[]);
+  _cache.dp_pedidos = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
 
-  // 3. Guardar en cache local para la próxima vez
+  // 3. Productos y usuarios: solo recargar si el cache es muy viejo (>24h)
+  const raw = localStorage.getItem(CACHE_KEY);
+  const cacheAge = raw ? Date.now() - (JSON.parse(raw).ts||0) : Infinity;
+  if (cacheAge > CACHE_TTL_CFG || !hasCached) {
+    const [productos, usuarios] = await Promise.all([
+      fsList('productos').catch(()=>_cache.dp_productos),
+      fsList('usuarios').catch(()=>_cache.dp_users),
+    ]);
+    _cache.dp_productos = productos;
+    _cache.dp_users     = usuarios;
+  }
+
+  // 4. Guardar cache
   saveLocalCache();
 
-  // 4. Cargar clientes en segundo plano (no bloquea el arranque)
+  // 5. Clientes y rutas en segundo plano
   fsList('clientes').then(c => { _cache.dp_clientes = c; }).catch(()=>{});
   fsList('rutas').then(r => { _cache.dp_rutas = r; if(session) renderRutas(); }).catch(()=>{});
 }
 
+// ── Timestamp de última modificación ──
+// Al guardar cualquier pedido, actualiza este doc (1 escritura pequeña)
+// El sync solo descarga pedidos si el timestamp cambió (1 lectura pequeña cada 30s)
+async function marcarCambio() {
+  try {
+    const token = await getToken();
+    await fetch(`${FS_BASE}/meta/lastChange`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { ts: { stringValue: Date.now().toString() }, by: { stringValue: session?.name||'' } } })
+    });
+  } catch(e) {}
+}
+
+async function checkCambios() {
+  try {
+    const token = await getToken();
+    const r = await fetch(`${FS_BASE}/meta/lastChange`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) return null;
+    const doc = await r.json();
+    return doc.fields?.ts?.stringValue || null;
+  } catch(e) { return null; }
+}
+
 function subscribeToData() {
-  // Sync liviano cada 60s — solo pedidos, no toda la colección
-  let lastSync = Date.now();
-  setInterval(async () => {
-    if (!session) return;
-    // Solo sincronizar si la pestaña está activa
-    if (document.hidden) return;
+  let lastKnownTs = Date.now().toString();
+  let lastFullSync = 0;
+
+  async function syncSiHayCambios() {
+    if (!session || document.hidden) return;
+
+    // 1. Leer solo el timestamp (1 lectura pequeña)
+    const ts = await checkCambios();
+    if (!ts || ts === lastKnownTs) return; // sin cambios, no hacer nada
+    lastKnownTs = ts;
+
+    // 2. Hay cambios — descargar pedidos
     const pedidos = await fsList('pedidos').catch(()=>null);
     if (pedidos) {
       _cache.dp_pedidos = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
       saveLocalCache();
       renderPedidos(); updateStats(); renderWeb();
-      lastSync = Date.now();
+      lastFullSync = Date.now();
     }
-  }, 15000);
+  }
+
+  // Revisar cambios cada 30 segundos (solo 1 lectura pequeña si no hay cambios)
+  setInterval(syncSiHayCambios, 30000);
+
+  // Sync completo al volver a la pestaña
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) syncSiHayCambios();
+  });
+
+  // Sync al hacer clic en nav
+  ['nav-pedidos','nav-web','nav-rutas'].forEach(id => {
+    const el = $(id);
+    if (el) el.addEventListener('click', () => setTimeout(syncSiHayCambios, 100));
+  });
 }
 
 async function initDataIfNeeded() {
@@ -1581,6 +1632,7 @@ function savePedido() {
 
   // 3. Guardar en Firebase en segundo plano
   setDoc('dp_pedidos', obj).catch(() => toast('⚠️ Error guardando en servidor'));
+  marcarCambio();
   // 4. Guardar/actualizar cliente automáticamente
   if (esNuevo) guardarCliente(obj);
   // 5. Vincular a ruta si aplica y reabrir modal de ruta
@@ -1870,6 +1922,7 @@ function saveFactura() {
     toast('✅ Factura actualizada');
     setTimeout(() => verPedido(editFacturaId), 200);
     setDoc('dp_pedidos', p).catch(() => toast('⚠️ Error guardando en servidor'));
+    marcarCambio();
   }
 }
 let despachandoId = null;
@@ -1896,6 +1949,7 @@ function saveDespacho() {
     toast('🚚 Pedido marcado como despachado');
     setTimeout(() => verPedido(despachandoId), 200);
     setDoc('dp_pedidos', p).catch(() => toast('⚠️ Error guardando en servidor'));
+    marcarCambio();
   }
 }
 
