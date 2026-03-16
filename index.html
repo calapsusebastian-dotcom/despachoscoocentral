@@ -2299,7 +2299,7 @@ function verRuta(id) {
     ${esActiva && (esVendedora || isAdmin())
       ? `<button class="btn btn-outline" onclick="abrirPedidoEnRuta('${id}')">+ Agregar Pedido</button>`
       : ''}
-    ${esActiva && esVendedora && pedidos.length > 0
+    ${esActiva && (esVendedora || isAdmin()) && pedidos.length > 0
       ? `<button class="btn btn-accent" onclick="terminarRuta('${id}')">✅ Terminar Ruta</button>`
       : ''}
     ${isAdmin() && esActiva
@@ -2349,8 +2349,10 @@ function terminarRuta(id) {
 
   closeModal('modal-ver-ruta');
   renderRutas();
+  renderPedidos();
+  updateStats();
   actualizarSelectorRutas();
-  toast(`🚀 Ruta "${ruta.nombre}" terminada — ${pedidosRuta.length} pedidos en Rutas para la facturadora`);
+  toast(`🚀 Ruta "${ruta.nombre}" terminada — ${pedidosRuta.length} pedidos listos para facturación`);
 }
 
 function eliminarRuta(id) {
