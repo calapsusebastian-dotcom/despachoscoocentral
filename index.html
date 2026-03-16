@@ -2326,6 +2326,7 @@ function verRuta(id) {
 
   $('ver-ruta-footer').innerHTML = `
     <button class="btn btn-outline" onclick="closeModal('modal-ver-ruta')">Cerrar</button>
+    ${pedidos.length > 0 ? `<button class="btn btn-outline" onclick="imprimirConsolidadoRuta('${id}')">🖨️ Imprimir</button>` : ''}
     ${esActiva && (esVendedora || isAdmin())
       ? `<button class="btn btn-outline" onclick="abrirPedidoEnRuta('${id}')">+ Agregar Pedido</button>`
       : ''}
@@ -2352,7 +2353,81 @@ function openPedidoModalRuta() {
   }
 }
 
-function abrirPedidoEnRuta(rutaId) {
+function imprimirConsolidadoRuta(id) {
+  const ruta    = (get('dp_rutas')||[]).find(r=>r.id===id);
+  const pedidos = get('dp_pedidos').filter(p=>p.rutaId===id);
+  if (!ruta || !pedidos.length) return;
+
+  // Consolidar productos — sumar cantidades del mismo producto
+  const consolidado = {};
+  pedidos.forEach(p => {
+    const lineas = (p.lineas && p.lineas.length)
+      ? p.lineas
+      : [{ producto: p.producto, cantidad: 1 }];
+    lineas.forEach(l => {
+      if (!l.producto) return;
+      if (!consolidado[l.producto]) consolidado[l.producto] = 0;
+      consolidado[l.producto] += Number(l.cantidad) || 1;
+    });
+  });
+
+  const filas = Object.entries(consolidado)
+    .sort((a,b)=>b[1]-a[1])
+    .map(([prod, cant]) => `
+      <tr>
+        <td style="padding:.7rem 1rem;border-bottom:1px solid #e5e7eb;font-size:15px">${prod}</td>
+        <td style="padding:.7rem 1rem;border-bottom:1px solid #e5e7eb;font-size:15px;text-align:center;font-weight:700;color:#1d4ed8">${cant}</td>
+      </tr>`).join('');
+
+  const total = Object.values(consolidado).reduce((s,c)=>s+c,0);
+
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/>
+    <title>Consolidado — ${ruta.nombre}</title>
+    <style>
+      body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 2rem; color: #0f172a; }
+      .header { border-bottom: 3px solid #2563eb; padding-bottom: 1rem; margin-bottom: 1.5rem; display:flex; justify-content:space-between; align-items:flex-end; }
+      .title { font-size: 22px; font-weight: 700; color: #2563eb; }
+      .subtitle { font-size: 13px; color: #64748b; margin-top:.3rem }
+      .meta { text-align:right; font-size:13px; color:#64748b }
+      table { width:100%; border-collapse:collapse; }
+      thead tr { background:#f0f4ff; }
+      th { padding:.7rem 1rem; text-align:left; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:#64748b; }
+      th:last-child { text-align:center; }
+      .total-row td { padding:.8rem 1rem; font-weight:700; font-size:15px; border-top:2px solid #2563eb; background:#f0f4ff; }
+      .total-row td:last-child { text-align:center; color:#1d4ed8; }
+      @media print { body { padding: 1rem; } }
+    </style>
+  </head><body>
+    <div class="header">
+      <div>
+        <div class="title">🗺️ ${ruta.nombre}</div>
+        <div class="subtitle">Consolidado de productos · ${pedidos.length} cliente${pedidos.length!==1?'s':''}</div>
+      </div>
+      <div class="meta">
+        Fecha: <strong>${fmtDate(ruta.fecha)}</strong><br/>
+        Creado por: <strong>${ruta.creadoPor||'—'}</strong>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Producto</th><th style="text-align:center">Cantidad Total</th></tr></thead>
+      <tbody>${filas}</tbody>
+      <tfoot>
+        <tr class="total-row">
+          <td>TOTAL UNIDADES</td>
+          <td>${total}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </body></html>`;
+
+  const w = window.open('', '_blank', 'width=600,height=700');
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 400);
+}
+
+
   closeModal('modal-ver-ruta');
   openPedidoModal(null, null, rutaId);
 }
