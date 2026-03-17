@@ -424,11 +424,17 @@
         <div class="filters">
           <div class="search-wrap">
             <span class="sico">🔍</span>
-            <input id="p-search" type="text" placeholder="Buscar nombre, ciudad, factura, CC..." oninput="renderPedidos()"/>
+            <input id="p-search" type="text" placeholder="Buscar nombre, ciudad, factura, CC..." oninput="resetPaginaYRender()"/>
           </div>
-          <select id="p-estado" onchange="renderPedidos()" class="filter-sel" style="background:var(--card);border:1.5px solid var(--border);border-radius:8px;padding:.6rem .85rem;color:var(--text);font-family:var(--font);font-size:.83rem;outline:none;">
+          <select id="p-estado" onchange="resetPaginaYRender()" class="filter-sel" style="background:var(--card);border:1.5px solid var(--border);border-radius:8px;padding:.6rem .85rem;color:var(--text);font-family:var(--font);font-size:.83rem;outline:none;">
             <option value="">Todos los estados</option>
             <option>Pendiente</option><option>Despachado</option>
+          </select>
+          <select id="p-perpage" onchange="resetPaginaYRender()" class="filter-sel" style="background:var(--card);border:1.5px solid var(--border);border-radius:8px;padding:.6rem .85rem;color:var(--text);font-family:var(--font);font-size:.83rem;outline:none;">
+            <option value="30">30 por página</option>
+            <option value="50">50 por página</option>
+            <option value="100">100 por página</option>
+            <option value="999999">Todos</option>
           </select>
         </div>
         <div class="table-wrap">
@@ -444,6 +450,11 @@
           <div class="empty" id="empty-pedidos" style="display:none">
             <div class="eico">📭</div><p>No hay pedidos que mostrar</p>
           </div>
+        </div>
+        <!-- Paginador -->
+        <div id="paginador-pedidos" style="display:flex;align-items:center;justify-content:space-between;padding:1rem 0;flex-wrap:wrap;gap:.5rem">
+          <div id="pag-info" style="font-size:.83rem;color:var(--muted)"></div>
+          <div style="display:flex;gap:.3rem;flex-wrap:wrap" id="pag-botones"></div>
         </div>
       </div>
     </div>
@@ -1702,11 +1713,18 @@ function savePedido() {
   }
 }
 
+let _paginaActual = 1;
+
+function resetPaginaYRender() {
+  _paginaActual = 1;
+  renderPedidos();
+}
+
 function renderPedidos() {
   const q   = $('p-search').value.toLowerCase();
   const est = $('p-estado').value;
-  // Pedidos de rutas: NUNCA en lista general — solo en sección Rutas
-  // Facturadora ve los de rutas terminadas al entrar a Rutas, no aquí
+  const porPagina = parseInt($('p-perpage')?.value || '30');
+
   const sinRutas = p => !p.rutaId;
   const todos = get('dp_pedidos').filter(sinRutas);
 
@@ -1720,14 +1738,23 @@ function renderPedidos() {
   } else {
     base = todos.filter(p => p.creadoPor === session.name && p.origen !== 'web');
   }
+
   const list = base.filter(p => {
     const hit = !q || [p.nombre,p.ciudad,p.factura,p.cc,p.celular,p.producto].some(v=>(v||'').toLowerCase().includes(q));
     return hit && (!est || p.estado===est);
   });
+
+  // Paginación
+  const totalPags = Math.max(1, Math.ceil(list.length / porPagina));
+  if (_paginaActual > totalPags) _paginaActual = totalPags;
+  const inicio  = (_paginaActual - 1) * porPagina;
+  const pagina  = list.slice(inicio, inicio + porPagina);
+
   const tbody = $('tbody-pedidos');
   tbody.innerHTML='';
-  $('empty-pedidos').style.display = list.length?'none':'block';
-  list.forEach(p => {
+  $('empty-pedidos').style.display = list.length ? 'none' : 'block';
+
+  pagina.forEach(p => {
     const tr=document.createElement('tr');
     tr.innerHTML=`
       <td class="td-mono">${p.factura||'—'}</td>
@@ -1749,6 +1776,49 @@ function renderPedidos() {
     tr.onclick = ()=>verPedido(p.id);
     tbody.appendChild(tr);
   });
+
+  // Renderizar paginador
+  const info  = $('pag-info');
+  const bots  = $('pag-botones');
+  const pag   = $('paginador-pedidos');
+  if (info && bots && pag) {
+    pag.style.display = list.length > porPagina || totalPags > 1 ? 'flex' : 'none';
+    info.textContent = `${inicio+1}–${Math.min(inicio+porPagina, list.length)} de ${list.length} pedidos`;
+    bots.innerHTML = '';
+
+    // Botón anterior
+    const btnPrev = document.createElement('button');
+    btnPrev.className = 'btn btn-outline btn-sm';
+    btnPrev.textContent = '‹';
+    btnPrev.disabled = _paginaActual === 1;
+    btnPrev.onclick = () => { _paginaActual--; renderPedidos(); };
+    bots.appendChild(btnPrev);
+
+    // Números de página (max 5 visibles)
+    const rango = 2;
+    for (let i = 1; i <= totalPags; i++) {
+      if (i === 1 || i === totalPags || (i >= _paginaActual - rango && i <= _paginaActual + rango)) {
+        const btn = document.createElement('button');
+        btn.className = `btn btn-sm ${i === _paginaActual ? 'btn-accent' : 'btn-outline'}`;
+        btn.textContent = i;
+        btn.onclick = () => { _paginaActual = i; renderPedidos(); };
+        bots.appendChild(btn);
+      } else if (i === _paginaActual - rango - 1 || i === _paginaActual + rango + 1) {
+        const sep = document.createElement('span');
+        sep.textContent = '…';
+        sep.style.cssText = 'padding:0 .3rem;color:var(--muted);line-height:2';
+        bots.appendChild(sep);
+      }
+    }
+
+    // Botón siguiente
+    const btnNext = document.createElement('button');
+    btnNext.className = 'btn btn-outline btn-sm';
+    btnNext.textContent = '›';
+    btnNext.disabled = _paginaActual === totalPags;
+    btnNext.onclick = () => { _paginaActual++; renderPedidos(); };
+    bots.appendChild(btnNext);
+  }
 }
 
 function updateStats() {
