@@ -338,7 +338,13 @@
 <!-- ══════════════════════════════════════════
      LOGIN
 ══════════════════════════════════════════ -->
-<div id="view-login">
+<div id="view-loading" style="position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:1rem">
+  <div style="font-size:2.5rem">📦</div>
+  <div style="font-weight:700;font-size:1.1rem;color:var(--text)">DespachosPro</div>
+  <div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite"></div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</div>
+<div id="view-login" style="display:none">
   <div class="login-wrap">
     <div class="brand">
       <div class="brand-ico">📦</div>
@@ -356,16 +362,6 @@
         <input type="password" id="l-pass" placeholder="••••••••"/>
       </div>
       <button id="btn-login" class="btn btn-accent" style="width:100%;justify-content:center" onclick="doLogin()">Ingresar →</button>
-    </div>
-    <div class="demo-hint">
-      <p>Usuarios de prueba — clic para autocompletar</p>
-      <div class="demo-users">
-        <span class="chip" onclick="fillLogin('admin@demo.com','admin123')">👑 Admin</span>
-        <span class="chip" onclick="fillLogin('operador@demo.com','oper123')">👤 Operador</span>
-        <span class="chip" onclick="fillLogin('facturadora@demo.com','fact123')">🧾 Facturadora</span>
-        <span class="chip" onclick="fillLogin('web@demo.com','web123')">🌐 Web</span>
-        <span class="chip" onclick="fillLogin('vendedora@demo.com','vend123')">🗺️ Vendedora</span>
-      </div>
     </div>
   </div>
 </div>
@@ -1070,19 +1066,23 @@ function loadLocalCache() {
 }
 
 async function loadAllData() {
-  // 1. Mostrar cache local INMEDIATAMENTE
+  // 1. Cache local → UI instantánea
   const hasCached = loadLocalCache();
   if (hasCached && session) {
     renderPedidos(); updateStats(); renderWeb();
   }
 
-  // 2. Descargar solo pedidos de los últimos 60 días (no todos)
-  const pedidos = await fsListPedidos(60).catch(()=>[]);
-  _cache.dp_pedidos = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
-
-  // 3. Productos y usuarios: solo si cache es viejo (>24h)
+  // 2. Pedidos: solo descargar si el cache tiene más de 10 min
   const raw = localStorage.getItem(CACHE_KEY);
-  const cacheAge = raw ? Date.now() - (JSON.parse(raw).ts||0) : Infinity;
+  const cacheData = raw ? JSON.parse(raw) : null;
+  const cacheAge  = cacheData ? Date.now() - (cacheData.ts||0) : Infinity;
+
+  if (cacheAge > 10 * 60 * 1000 || !hasCached) {
+    const pedidos = await fsListPedidos(60).catch(()=>_cache.dp_pedidos);
+    _cache.dp_pedidos = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  }
+
+  // 3. Productos y usuarios: solo si cache >24h
   if (cacheAge > CACHE_TTL_CFG || !hasCached) {
     const [productos, usuarios] = await Promise.all([
       fsList('productos').catch(()=>_cache.dp_productos),
@@ -1093,8 +1093,9 @@ async function loadAllData() {
   }
 
   saveLocalCache();
+  renderPedidos(); updateStats();
 
-  // 4. Clientes y rutas en segundo plano
+  // 4. Rutas y clientes en segundo plano (no bloquean)
   fsList('clientes').then(c => { _cache.dp_clientes = c; }).catch(()=>{});
   fsList('rutas').then(r => { _cache.dp_rutas = r; if(session) renderRutas(); }).catch(()=>{});
 }
@@ -1124,39 +1125,48 @@ async function checkCambios() {
 }
 
 function subscribeToData() {
-  let lastKnownTs = Date.now().toString();
-  let lastFullSync = 0;
+  let lastKnownTs  = Date.now().toString();
+  let lastSyncTime = Date.now();
 
   async function syncSiHayCambios() {
     if (!session || document.hidden) return;
 
-    // 1. Leer solo el timestamp (1 lectura pequeña)
+    // 1 lectura — solo el timestamp
     const ts = await checkCambios();
-    if (!ts || ts === lastKnownTs) return; // sin cambios, no hacer nada
+    if (!ts || ts === lastKnownTs) return;
     lastKnownTs = ts;
 
-    // 2. Hay cambios — descargar solo pedidos recientes
-    const pedidos = await fsListPedidos(60).catch(()=>null);
-    if (pedidos) {
-      _cache.dp_pedidos = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+    // Hay cambios — descargar solo pedidos modificados desde el último sync
+    // Convierte timestamp ms a fecha YYYY-MM-DD para filtrar
+    const fechaDesde = new Date(lastSyncTime);
+    fechaDesde.setDate(fechaDesde.getDate() - 1); // 1 día atrás por seguridad
+    const diasDesde = Math.ceil((Date.now() - fechaDesde.getTime()) / 86400000);
+
+    const pedidosNuevos = await fsListPedidos(Math.min(diasDesde + 1, 60)).catch(()=>null);
+    if (pedidosNuevos) {
+      // Merge: reemplazar pedidos existentes + agregar nuevos
+      const mapaExistentes = new Map(_cache.dp_pedidos.map(p=>[p.id,p]));
+      pedidosNuevos.forEach(p => mapaExistentes.set(p.id, p));
+      _cache.dp_pedidos = [...mapaExistentes.values()]
+        .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
       saveLocalCache();
       renderPedidos(); updateStats(); renderWeb();
-      lastFullSync = Date.now();
+      lastSyncTime = Date.now();
     }
   }
 
-  // Revisar cambios cada 30 segundos (solo 1 lectura pequeña si no hay cambios)
+  // Revisar cada 30s — solo 1 lectura si no hay cambios
   setInterval(syncSiHayCambios, 30000);
 
-  // Sync completo al volver a la pestaña
+  // Al volver a la pestaña
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) syncSiHayCambios();
   });
 
-  // Sync al hacer clic en nav
+  // Al navegar
   ['nav-pedidos','nav-web','nav-rutas'].forEach(id => {
     const el = $(id);
-    if (el) el.addEventListener('click', () => setTimeout(syncSiHayCambios, 100));
+    if (el) el.addEventListener('click', () => setTimeout(syncSiHayCambios, 150));
   });
 }
 
@@ -2657,17 +2667,20 @@ function openPedidoWebModal() {
 // ─────────────────────────────────────────────
 function startApp() {
   auth.onAuthStateChanged(async (firebaseUser) => {
+    // Ocultar spinner de carga
+    const loader = $('view-loading');
+    if (loader) loader.style.display = 'none';
+
     if (firebaseUser) {
       try {
-        // 1. Intentar sesión guardada en localStorage para arranque instantáneo
+        // 1. Sesión guardada → arranque instantáneo
         const cachedSession = localStorage.getItem('dp_session_user');
         if (cachedSession) {
           const cachedUser = JSON.parse(cachedSession);
           if (cachedUser.id === firebaseUser.uid && cachedUser.activo !== false) {
-            // Mostrar app INMEDIATAMENTE con datos del cache
-            const hasCached = loadLocalCache();
+            loadLocalCache();
             bootApp(cachedUser);
-            // Luego refrescar datos de Firebase en segundo plano
+            // Refrescar en segundo plano
             fsGet('usuarios', firebaseUser.uid).then(freshUser => {
               if (freshUser) {
                 localStorage.setItem('dp_session_user', JSON.stringify(freshUser));
