@@ -325,12 +325,69 @@
     }
     select.filter-sel:focus { border-color:var(--blue); }
 
-    @media(max-width:768px) {
+    /* ── RESPONSIVE ── */
+    @media(max-width:900px) {
       .sidebar { width:200px; }
+      .content { padding:1.2rem 1rem; }
+      .topbar { padding:.9rem 1rem; }
+      .stats { grid-template-columns:repeat(2,1fr); }
+    }
+
+    @media(max-width:640px) {
+      /* Sidebar deslizable en móvil */
+      .sidebar {
+        position:fixed; left:-260px; top:0; z-index:1000;
+        width:240px; height:100vh;
+        transition:left .25s ease;
+        box-shadow: none;
+      }
+      .sidebar.open {
+        left:0;
+        box-shadow: 4px 0 24px rgba(15,23,42,.18);
+      }
+      /* Overlay oscuro detrás del sidebar */
+      #sidebar-overlay {
+        display:none; position:fixed; inset:0; background:rgba(15,23,42,.45);
+        z-index:999; backdrop-filter:blur(2px);
+      }
+      #sidebar-overlay.open { display:block; }
+
+      /* Botón hamburguesa */
+      #btn-menu {
+        display:flex !important;
+      }
+
+      #view-app { flex-direction:column; }
+      .main { width:100%; }
+      .topbar { padding:.75rem 1rem; gap:.5rem; }
+      .page-title { font-size:1rem; }
+      .content { padding:1rem .75rem; }
+      .stats { grid-template-columns:repeat(2,1fr); gap:.6rem; }
+      .stat-card { padding:.9rem; }
+      .stat-ico { font-size:1.3rem; }
+      .stat-val { font-size:1.3rem; }
+      .filters { flex-direction:column; gap:.5rem; }
+      .filter-sel { width:100% !important; }
+      .search-wrap { min-width:unset; }
       .form-grid { grid-template-columns:1fr; }
       .price-row { grid-template-columns:1fr; }
       .detail-grid { grid-template-columns:1fr; }
+      .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      table { min-width:580px; }
+      .modal { margin:.5rem; max-height:95vh; }
+      .topbar-actions { gap:.4rem; }
+      .btn { padding:.5rem .8rem; font-size:.8rem; }
+      #rutas-lista { grid-template-columns:1fr 1fr !important; }
     }
+
+    @media(max-width:400px) {
+      .stats { grid-template-columns:1fr 1fr; }
+      #rutas-lista { grid-template-columns:1fr !important; }
+      .topbar-actions .btn-outline { display:none; }
+    }
+
+    /* Botón hamburguesa — oculto por defecto */
+    #btn-menu { display:none; background:none; border:none; cursor:pointer; padding:.4rem; color:var(--text); font-size:1.4rem; flex-shrink:0; }
   </style>
 </head>
 <body>
@@ -371,18 +428,21 @@
 ══════════════════════════════════════════ -->
 <div id="view-app">
 
+  <!-- Overlay móvil -->
+  <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
   <!-- SIDEBAR -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="logo">
       <div class="logo-ico">📦</div>
       <span>DespachosPro</span>
     </div>
     <nav>
-      <div class="nav-item active" id="nav-pedidos" onclick="showPage('pedidos',this)"><span class="ico">📋</span> Pedidos</div>
-      <div class="nav-item" id="nav-rutas" onclick="showPage('rutas',this)" style="display:none"><span class="ico">🗺️</span> Rutas</div>
-      <div class="nav-item" id="nav-web" onclick="showPage('web',this)" style="display:none"><span class="ico">🌐</span> Página Web</div>
-      <div class="nav-item" id="nav-productos" onclick="showPage('productos',this)" style="display:none"><span class="ico">🛒</span> Productos</div>
-      <div class="nav-item" id="nav-usuarios" onclick="showPage('usuarios',this)" style="display:none"><span class="ico">👥</span> Usuarios</div>
+      <div class="nav-item active" id="nav-pedidos" onclick="showPage('pedidos',this);closeSidebar()"><span class="ico">📋</span> Pedidos</div>
+      <div class="nav-item" id="nav-rutas" onclick="showPage('rutas',this);closeSidebar()" style="display:none"><span class="ico">🗺️</span> Rutas</div>
+      <div class="nav-item" id="nav-web" onclick="showPage('web',this);closeSidebar()" style="display:none"><span class="ico">🌐</span> Página Web</div>
+      <div class="nav-item" id="nav-productos" onclick="showPage('productos',this);closeSidebar()" style="display:none"><span class="ico">🛒</span> Productos</div>
+      <div class="nav-item" id="nav-usuarios" onclick="showPage('usuarios',this);closeSidebar()" style="display:none"><span class="ico">👥</span> Usuarios</div>
     </nav>
     <div class="sidebar-footer">
       <div class="user-chip">
@@ -402,7 +462,8 @@
     <!-- ── PAGE PEDIDOS ── -->
     <div id="page-pedidos">
       <div class="topbar">
-        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+          <button id="btn-menu" onclick="openSidebar()" title="Menú">☰</button>
           <div class="page-title">Pedidos</div>
           <div id="admin-tabs" style="display:none;gap:.4rem;display:flex">
             <button id="tab-pedidos" class="btn btn-accent btn-sm" onclick="switchTab('pedidos')">📋 Pedidos</button>
@@ -1327,6 +1388,33 @@ function bootApp(user) {
 // ─────────────────────────────────────────────
 //  NAVEGACIÓN
 // ─────────────────────────────────────────────
+function openSidebar() {
+  $('sidebar').classList.add('open');
+  $('sidebar-overlay').classList.add('open');
+}
+function closeSidebar() {
+  $('sidebar').classList.remove('open');
+  $('sidebar-overlay').classList.remove('open');
+}
+
+// Inyectar botón hamburguesa en todos los topbars al cambiar de página
+function injectMenuBtn() {
+  document.querySelectorAll('.topbar').forEach(tb => {
+    if (!tb.querySelector('.menu-btn-injected')) {
+      const btn = document.createElement('button');
+      btn.id = 'btn-menu-' + Math.random().toString(36).slice(2);
+      btn.className = 'menu-btn-injected';
+      btn.onclick = openSidebar;
+      btn.title = 'Menú';
+      btn.textContent = '☰';
+      btn.style.cssText = 'display:none;background:none;border:none;cursor:pointer;padding:.4rem;color:var(--text);font-size:1.4rem;flex-shrink:0';
+      // Solo mostrar en móvil
+      if (window.innerWidth <= 640) btn.style.display = 'flex';
+      tb.insertBefore(btn, tb.firstChild);
+    }
+  });
+}
+
 function showPage(page, el) {
   showPageDirect(page);
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -1340,7 +1428,17 @@ function showPageDirect(page) {
   if (page==='usuarios')  renderUsuarios();
   if (page==='web')       renderWeb();
   if (page==='rutas')     renderRutas();
+  setTimeout(injectMenuBtn, 50);
 }
+
+// Actualizar visibilidad del botón hamburguesa al redimensionar
+window.addEventListener('resize', () => {
+  const isMobile = window.innerWidth <= 640;
+  document.querySelectorAll('.menu-btn-injected, #btn-menu').forEach(b => {
+    b.style.display = isMobile ? 'flex' : 'none';
+  });
+  if (!isMobile) closeSidebar();
+});
 
 // ─────────────────────────────────────────────
 //  CLIENTES — autocompletado
