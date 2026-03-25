@@ -716,6 +716,15 @@
               <option value="Credito 90">📅 Crédito 90 días</option>
             </select>
           </div>
+          <div class="form-group">
+            <label>Tipo de Precio</label>
+            <select id="p-tipoprecio">
+              <option value="">— Seleccionar —</option>
+              <option value="Asociado">🤝 Asociado</option>
+              <option value="Publico">🏪 Público</option>
+              <option value="Distribuidor">🚛 Distribuidor</option>
+            </select>
+          </div>
           <div class="form-group"><label>No. Orden</label><input type="text" id="p-orden" placeholder="ORD-0001"/></div>
           <div class="form-group full"><label>Observaciones</label><textarea id="p-observacion" placeholder="Notas adicionales del pedido..."></textarea></div>
         </div>
@@ -1631,6 +1640,7 @@ function openPedidoModal(id=null, origen=null, rutaIdPresel=null) {
   if (taObs) { taObs.value = ''; taObs.removeAttribute('disabled'); taObs.style.opacity=''; taObs.style.cursor=''; }
   $('p-estadop').value = 'Pendiente';
   $('p-mediopago').value = 'Pendiente';
+  $('p-tipoprecio').value = '';
 
   // Campo ruta: solo visible cuando se abre desde el contexto de una ruta
   const grupoRuta = $('p-ruta-group');
@@ -1664,6 +1674,7 @@ function openPedidoModal(id=null, origen=null, rutaIdPresel=null) {
       $('p-orden').value      = p.orden||'';
       $('p-observacion').value= p.observacion||'';
       $('p-mediopago').value = p.medioPago||'Pendiente';
+      $('p-tipoprecio').value = p.tipoPrecio||'';
       $('p-estadop').value   = p.estado||'Pendiente';
       // cargar líneas guardadas
       lineas = (p.lineas||[]).map(l=>({...l}));
@@ -1712,7 +1723,7 @@ function openPedidoModal(id=null, origen=null, rutaIdPresel=null) {
   // Si está despachado: congelar TODOS los campos y ocultar guardar
   if (congelado) {
     ['p-nombre','p-cc','p-email','p-celular','p-ciudad','p-direccion',
-     'p-tipo','p-mediopago','p-orden','p-observacion','p-domicilio'].forEach(f => {
+     'p-tipo','p-mediopago','p-tipoprecio','p-orden','p-observacion','p-domicilio'].forEach(f => {
       const el=$(f); if(!el) return;
       el.disabled=true; el.style.opacity='.5'; el.style.cursor='not-allowed';
     });
@@ -1779,6 +1790,7 @@ function savePedido() {
     orden:        $('p-orden').value.trim(),
     observacion:  ($('p-observacion').value || $('p-observacion').textContent || '').trim(),
     medioPago:    $('p-mediopago').value,
+    tipoPrecio:   $('p-tipoprecio').value,
     estado:       isAdmin() ? $('p-estadop').value                 : (original?.estado     || 'Pendiente'),
     creadoPor:    original?.creadoPor || session.name,
     origen:       original?.origen || openPedidoModal._origen || 'interno',
@@ -1999,6 +2011,7 @@ function verPedido(id) {
         <div class="detail-item"><div class="dl">No. Factura</div><div class="dv td-mono">${p.factura||'—'}</div></div>
         <div class="detail-item"><div class="dl">No. Orden</div><div class="dv td-mono">${p.orden||'—'}</div></div>
         <div class="detail-item"><div class="dl">Medio de Pago</div><div class="dv">${p.medioPago||'—'}</div></div>
+        ${p.tipoPrecio?`<div class="detail-item"><div class="dl">Tipo de Precio</div><div class="dv"><span style="background:rgba(37,99,235,.1);color:var(--blue);border-radius:6px;padding:.2rem .6rem;font-size:.78rem;font-weight:600">${p.tipoPrecio}</span></div></div>`:''}
         <div class="detail-item"><div class="dl">Registrado por</div><div class="dv">${p.creadoPor||'—'}</div></div>
         ${p.rutaNombre?`<div class="detail-item"><div class="dl">Ruta</div><div class="dv"><span style="background:rgba(234,88,12,.1);color:#ea580c;border-radius:6px;padding:.2rem .6rem;font-size:.78rem;font-weight:600">🗺️ ${p.rutaNombre}</span></div></div>`:''}
         ${p.observacion?`<div class="detail-item full"><div class="dl">Observaciones</div><div class="dv">${p.observacion}</div></div>`:''}
@@ -2194,7 +2207,7 @@ function exportExcel() {
     'Fecha Pedido','Tipo Persona','Nombre / Razón Social','C.C. / NIT','Email','Celular',
     'Dirección Entrega','Ciudad',
     'Producto','Tipo Molienda','Unidades','Precio Unitario ($)','Subtotal ($)',
-    'Total Envío ($)','Valor Total ($)','No. Factura','No. Orden','Medio de Pago','Observaciones','Estado','Registrado por'
+    'Total Envío ($)','Valor Total ($)','No. Factura','No. Orden','Medio de Pago','Tipo de Precio','Observaciones','Estado','Registrado por'
   ];
 
   const data = [headers];
