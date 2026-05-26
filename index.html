@@ -227,9 +227,10 @@
     .badge-cancelado  { background:rgba(239,68,68,.1);    color:var(--danger); }
     .badge-admin      { background:rgba(37,99,235,.1);    color:var(--blue); }
     .badge-facturadora{ background:rgba(16,185,129,.1);   color:#059669; }
-    .badge-web        { background:rgba(99,102,241,.1);   color:#6366f1; }
-    .badge-vendedora  { background:rgba(234,88,12,.1);    color:#ea580c; }
-    .badge-user       { background:rgba(139,92,246,.1);   color:var(--purple); }
+    .badge-web          { background:rgba(99,102,241,.1);   color:#6366f1; }
+    .badge-vendedora    { background:rgba(234,88,12,.1);    color:#ea580c; }
+    .badge-user         { background:rgba(139,92,246,.1);   color:var(--purple); }
+    .badge-gruporecordar{ background:rgba(236,72,153,.1);   color:#db2777; }
 
     /* ═══ MODAL ═══ */
     .overlay {
@@ -441,6 +442,7 @@
       <div class="nav-item active" id="nav-pedidos" onclick="showPage('pedidos',this);closeSidebar()"><span class="ico">📋</span> Pedidos</div>
       <div class="nav-item" id="nav-rutas" onclick="showPage('rutas',this);closeSidebar()" style="display:none"><span class="ico">🗺️</span> Rutas</div>
       <div class="nav-item" id="nav-web" onclick="showPage('web',this);closeSidebar()" style="display:none"><span class="ico">🌐</span> Página Web</div>
+      <div class="nav-item" id="nav-gruporecordar" onclick="showPage('gruporecordar',this);closeSidebar()" style="display:none"><span class="ico">📣</span> Grupo Recordar</div>
       <div class="nav-item" id="nav-productos" onclick="showPage('productos',this);closeSidebar()" style="display:none"><span class="ico">🛒</span> Productos</div>
       <div class="nav-item" id="nav-usuarios" onclick="showPage('usuarios',this);closeSidebar()" style="display:none"><span class="ico">👥</span> Usuarios</div>
     </nav>
@@ -468,6 +470,7 @@
           <div id="admin-tabs" style="display:none;gap:.4rem;display:flex">
             <button id="tab-pedidos" class="btn btn-accent btn-sm" onclick="switchTab('pedidos')">📋 Pedidos</button>
             <button id="tab-web" class="btn btn-outline btn-sm" onclick="switchTab('web')">🌐 Página Web</button>
+            <button id="tab-gruporecordar" class="btn btn-outline btn-sm" onclick="switchTab('gruporecordar')">📣 Grupo Recordar</button>
           </div>
         </div>
         <div class="topbar-actions">
@@ -621,6 +624,48 @@
           </table>
           <div class="empty" id="empty-web" style="display:none">
             <div class="eico">🌐</div><p>No hay pedidos web que mostrar</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAGE GRUPO RECORDAR ── -->
+    <div id="page-gruporecordar" style="display:none">
+      <div class="topbar">
+        <div class="page-title">📣 Grupo Recordar</div>
+        <div class="topbar-actions">
+          <button class="btn btn-accent" onclick="openPedidoGrupoRecordarModal()">+ Nuevo pedido</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="stats">
+          <div class="stat-card c-blue"><div class="stat-ico">📣</div><div class="stat-label">Total</div><div class="stat-val" id="sgr-total">0</div></div>
+          <div class="stat-card c-warn"><div class="stat-ico">⏳</div><div class="stat-label">Pendientes</div><div class="stat-val" id="sgr-pend">0</div></div>
+          <div class="stat-card c-blue"><div class="stat-ico">🚚</div><div class="stat-label">Despachados</div><div class="stat-val" id="sgr-desp">0</div></div>
+          <div class="stat-card c-purple"><div class="stat-ico">💰</div><div class="stat-label">Total ventas</div><div class="stat-val" id="sgr-ventas">$0</div></div>
+        </div>
+        <div class="filters">
+          <div class="search-wrap">
+            <span class="sico">🔍</span>
+            <input id="gr-search" type="text" placeholder="Buscar nombre, ciudad, factura, CC..." oninput="renderGrupoRecordar()"/>
+          </div>
+          <select id="gr-estado" onchange="renderGrupoRecordar()" class="filter-sel">
+            <option value="">Todos los estados</option>
+            <option>Pendiente</option><option>Despachado</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th># Factura</th><th>Fecha</th><th>Cliente</th>
+                <th>Ciudad</th><th>Producto</th><th>Valor Total</th><th>Estado</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="tbody-gruporecordar"></tbody>
+          </table>
+          <div class="empty" id="empty-gruporecordar" style="display:none">
+            <div class="eico">📣</div><p>No hay pedidos de Grupo Recordar que mostrar</p>
           </div>
         </div>
       </div>
@@ -844,6 +889,10 @@
           <label style="display:flex;align-items:center;gap:.7rem;cursor:pointer;text-transform:none;font-size:.88rem;color:var(--text);font-weight:500;letter-spacing:0">
             <input type="checkbox" id="rol-vendedora" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer"/>
             <span>🗺️ <strong>Vendedora</strong> — crea y gestiona rutas de venta</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:.7rem;cursor:pointer;text-transform:none;font-size:.88rem;color:var(--text);font-weight:500;letter-spacing:0">
+            <input type="checkbox" id="rol-gruporecordar" style="width:16px;height:16px;accent-color:#db2777;cursor:pointer"/>
+            <span>📣 <strong>Grupo Recordar</strong> — crea y ve solo pedidos de Grupo Recordar</span>
           </label>
         </div>
       </div>
@@ -1150,7 +1199,7 @@ async function loadAllData() {
   // 1. Cache local → UI instantánea
   const hasCached = loadLocalCache();
   if (hasCached && session) {
-    renderPedidos(); updateStats(); renderWeb();
+    renderPedidos(); updateStats(); renderWeb(); renderGrupoRecordar();
   }
 
   // 2. Pedidos: solo descargar si el cache tiene más de 10 min
@@ -1174,7 +1223,7 @@ async function loadAllData() {
   }
 
   saveLocalCache();
-  renderPedidos(); updateStats();
+  renderPedidos(); updateStats(); renderGrupoRecordar();
 
   // 4. Rutas y clientes en segundo plano (no bloquean)
   fsList('clientes').then(c => { _cache.dp_clientes = c; }).catch(()=>{});
@@ -1231,7 +1280,7 @@ function subscribeToData() {
       _cache.dp_pedidos = [...mapaExistentes.values()]
         .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
       saveLocalCache();
-      renderPedidos(); updateStats(); renderWeb();
+      renderPedidos(); updateStats(); renderWeb(); renderGrupoRecordar();
       lastSyncTime = Date.now();
     }
   }
@@ -1245,7 +1294,7 @@ function subscribeToData() {
   });
 
   // Al navegar
-  ['nav-pedidos','nav-web','nav-rutas'].forEach(id => {
+  ['nav-pedidos','nav-web','nav-gruporecordar','nav-rutas'].forEach(id => {
     const el = $(id);
     if (el) el.addEventListener('click', () => setTimeout(syncSiHayCambios, 150));
   });
@@ -1367,23 +1416,28 @@ function bootApp(user) {
   $('view-login').style.display='none';
   $('view-app').classList.add('active');
   $('s-name').textContent  = user.name;
-  const roleNames = { admin:'👑 Admin', user:'👤 Operador', facturadora:'🧾 Facturadora', web:'🌐 Web', vendedora:'🗺️ Vendedora' };
+  const roleNames = { admin:'👑 Admin', user:'👤 Operador', facturadora:'🧾 Facturadora', web:'🌐 Web', vendedora:'🗺️ Vendedora', gruporecordar:'📣 Grupo Recordar' };
   const rolesLabel = (session.roles||[]).map(r=>roleNames[r]||r).join(' · ');
   $('s-role').textContent  = rolesLabel || '👤 Operador';
   $('s-avatar').textContent = user.name[0].toUpperCase();
 
   // Nav: mostrar secciones según roles (el admin siempre ve todo)
-  $('nav-productos').style.display = isAdmin() ? 'flex' : 'none';
-  $('nav-usuarios').style.display  = isAdmin() ? 'flex' : 'none';
-  $('nav-web').style.display       = hasRole('web') && !isAdmin() ? 'flex' : 'none';
-  $('nav-rutas').style.display     = (hasRole('vendedora') || isAdmin() || hasRole('facturadora')) ? 'flex' : 'none';
-  $('admin-tabs').style.display    = isAdmin() ? 'flex' : 'none';
+  $('nav-productos').style.display      = isAdmin() ? 'flex' : 'none';
+  $('nav-usuarios').style.display       = isAdmin() ? 'flex' : 'none';
+  $('nav-web').style.display            = hasRole('web') && !isAdmin() ? 'flex' : 'none';
+  $('nav-gruporecordar').style.display  = hasRole('gruporecordar') && !isAdmin() ? 'flex' : 'none';
+  $('nav-rutas').style.display          = (hasRole('vendedora') || isAdmin() || hasRole('facturadora')) ? 'flex' : 'none';
+  $('admin-tabs').style.display         = isAdmin() ? 'flex' : 'none';
 
   // Vendedora pura → arrancar en rutas
   if (hasRole('vendedora') && !isAdmin() && !hasRole('user') && !hasRole('facturadora')) {
     showPageDirect('rutas');
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
     $('nav-rutas').classList.add('active');
+  } else if (hasRole('gruporecordar') && !isAdmin() && !hasRole('user') && !hasRole('facturadora')) {
+    showPageDirect('gruporecordar');
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    $('nav-gruporecordar').classList.add('active');
   } else if (hasRole('web') && !isAdmin() && !hasRole('user') && !hasRole('facturadora')) {
     showPageDirect('web');
     document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -1430,13 +1484,14 @@ function showPage(page, el) {
   el.classList.add('active');
 }
 function showPageDirect(page) {
-  ['pedidos','web','rutas','productos','usuarios'].forEach(p => {
-    $(  'page-'+p).style.display = p===page?'':'none';
+  ['pedidos','web','gruporecordar','rutas','productos','usuarios'].forEach(p => {
+    $('page-'+p).style.display = p===page?'':'none';
   });
-  if (page==='productos') renderProductos();
-  if (page==='usuarios')  renderUsuarios();
-  if (page==='web')       renderWeb();
-  if (page==='rutas')     renderRutas();
+  if (page==='productos')     renderProductos();
+  if (page==='usuarios')      renderUsuarios();
+  if (page==='web')           renderWeb();
+  if (page==='gruporecordar') renderGrupoRecordar();
+  if (page==='rutas')         renderRutas();
   setTimeout(injectMenuBtn, 50);
 }
 
@@ -1628,9 +1683,26 @@ function loadProductosOpts() {}
 
 function openPedidoModal(id=null, origen=null, rutaIdPresel=null) {
   editPedidoId = id;
+  // Si se abre sin origen explícito para un pedido nuevo, inferir del tab activo
+  if (!id && !origen) {
+    if (currentTab === 'web') origen = 'web';
+    else if (currentTab === 'gruporecordar') origen = 'gruporecordar';
+  }
   const esWeb = origen==='web' || (!id && hasRole('web') && !isAdmin() && !hasRole('user'));
-  $('mp-title').textContent = esWeb ? (id?'Editar Pedido Web':'Nuevo Pedido — Página Web') : (id?'Editar Pedido':'Nuevo Pedido');
-  openPedidoModal._origen = esWeb ? 'web' : 'interno';
+  const esGrupoRecordar = origen==='gruporecordar' || (!id && hasRole('gruporecordar') && !isAdmin() && !hasRole('user'));
+  let tituloModal, origenModal;
+  if (esGrupoRecordar) {
+    tituloModal = id ? 'Editar Pedido — Grupo Recordar' : 'Nuevo Pedido — Grupo Recordar';
+    origenModal = 'gruporecordar';
+  } else if (esWeb) {
+    tituloModal = id ? 'Editar Pedido Web' : 'Nuevo Pedido — Página Web';
+    origenModal = 'web';
+  } else {
+    tituloModal = id ? 'Editar Pedido' : 'Nuevo Pedido';
+    origenModal = 'interno';
+  }
+  $('mp-title').textContent = tituloModal;
+  openPedidoModal._origen = origenModal;
 
   const fields = ['p-fecha','p-tipo','p-nombre','p-cc','p-email','p-celular',
                   'p-ciudad','p-direccion','p-domicilio','p-total','p-pedpag','p-factura','p-orden'];
@@ -1808,7 +1880,7 @@ function savePedido() {
 
   // 2. Cerrar modal y renderizar SIN esperar Firebase
   closeModal('modal-pedido');
-  renderPedidos(); updateStats();
+  renderPedidos(); updateStats(); renderWeb(); renderGrupoRecordar();
   toast(esNuevo ? '✅ Pedido creado' : '✅ Pedido actualizado');
 
   // 3. Guardar en Firebase en segundo plano
@@ -1840,13 +1912,13 @@ function renderPedidos() {
 
   let base;
   if (isAdmin()) {
-    base = currentTab === 'web'
-      ? todos.filter(p => p.origen==='web')
-      : todos.filter(p => p.origen !== 'web');
+    if (currentTab === 'web')           base = todos.filter(p => p.origen==='web');
+    else if (currentTab === 'gruporecordar') base = todos.filter(p => p.origen==='gruporecordar');
+    else                                base = todos.filter(p => p.origen !== 'web' && p.origen !== 'gruporecordar');
   } else if (hasRole('facturadora')) {
-    base = todos.filter(p => p.origen !== 'web');
+    base = todos.filter(p => p.origen !== 'web' && p.origen !== 'gruporecordar');
   } else {
-    base = todos.filter(p => p.creadoPor === session.name && p.origen !== 'web');
+    base = todos.filter(p => p.creadoPor === session.name && p.origen !== 'web' && p.origen !== 'gruporecordar');
   }
 
   const list = base.filter(p => {
@@ -1935,13 +2007,13 @@ function updateStats() {
   const todos = get('dp_pedidos').filter(p => !p.rutaId);
   let list;
   if (isAdmin()) {
-    list = currentTab === 'web'
-      ? todos.filter(p => p.origen==='web')
-      : todos.filter(p => p.origen !== 'web');
+    if (currentTab === 'web')           list = todos.filter(p => p.origen==='web');
+    else if (currentTab === 'gruporecordar') list = todos.filter(p => p.origen==='gruporecordar');
+    else                                list = todos.filter(p => p.origen !== 'web' && p.origen !== 'gruporecordar');
   } else if (hasRole('facturadora')) {
-    list = todos.filter(p => p.origen !== 'web');
+    list = todos.filter(p => p.origen !== 'web' && p.origen !== 'gruporecordar');
   } else {
-    list = todos.filter(p => p.creadoPor === session.name && p.origen !== 'web');
+    list = todos.filter(p => p.creadoPor === session.name && p.origen !== 'web' && p.origen !== 'gruporecordar');
   }
   $('st-total').textContent  = list.length;
   $('st-pend').textContent   = list.filter(p=>p.estado==='Pendiente').length;
@@ -2353,7 +2425,7 @@ function renderUsuarios() {
   const list = get('dp_users');
   const tbody = $('tbody-usuarios');
   tbody.innerHTML='';
-  const roleInfo = { admin:['badge-admin','👑 Admin'], user:['badge-user','👤 Operador'], facturadora:['badge-facturadora','🧾 Facturadora'], web:['badge-web','🌐 Web'], vendedora:['badge-vendedora','🗺️ Vendedora'] };
+  const roleInfo = { admin:['badge-admin','👑 Admin'], user:['badge-user','👤 Operador'], facturadora:['badge-facturadora','🧾 Facturadora'], web:['badge-web','🌐 Web'], vendedora:['badge-vendedora','🗺️ Vendedora'], gruporecordar:['badge-gruporecordar','📣 Grupo Recordar'] };
   list.forEach(u=>{
     const isMe = u.id===session.id;
     const roles = u.roles || [u.role||'user'];
@@ -2381,7 +2453,7 @@ function openUsuarioModal() {
   editUserId = null;
   $('mu-title').textContent = 'Nuevo Usuario';
   $('u-nombre').value=''; $('u-email').value=''; $('u-pass').value='';
-  $('rol-admin').checked=false; $('rol-user').checked=false; $('rol-facturadora').checked=false; $('rol-web').checked=false; $('rol-vendedora').checked=false;
+  $('rol-admin').checked=false; $('rol-user').checked=false; $('rol-facturadora').checked=false; $('rol-web').checked=false; $('rol-vendedora').checked=false; $('rol-gruporecordar').checked=false;
   $('u-activo').checked=true;
   $('u-pass-group').style.display='flex';
   $('usr-err').style.display='none';
@@ -2396,11 +2468,12 @@ function openEditUsuario(id) {
   $('u-email').value  = u.email;
   $('u-pass').value   = '';
   const roles = u.roles || [u.role||'user'];
-  $('rol-admin').checked       = roles.includes('admin');
-  $('rol-user').checked        = roles.includes('user');
-  $('rol-facturadora').checked = roles.includes('facturadora');
-  $('rol-web').checked         = roles.includes('web');
-  $('rol-vendedora').checked    = roles.includes('vendedora');
+  $('rol-admin').checked          = roles.includes('admin');
+  $('rol-user').checked           = roles.includes('user');
+  $('rol-facturadora').checked    = roles.includes('facturadora');
+  $('rol-web').checked            = roles.includes('web');
+  $('rol-vendedora').checked      = roles.includes('vendedora');
+  $('rol-gruporecordar').checked  = roles.includes('gruporecordar');
   $('u-activo').checked = u.activo !== false;
   $('u-pass-group').style.display = 'flex';
   const lbl = $('u-pass-group').querySelector('label');
@@ -2417,11 +2490,12 @@ async function saveUsuario() {
   const err    = $('usr-err');
 
   const roles = [];
-  if ($('rol-admin').checked)       roles.push('admin');
-  if ($('rol-user').checked)        roles.push('user');
-  if ($('rol-facturadora').checked) roles.push('facturadora');
-  if ($('rol-web').checked)         roles.push('web');
-  if ($('rol-vendedora').checked)    roles.push('vendedora');
+  if ($('rol-admin').checked)          roles.push('admin');
+  if ($('rol-user').checked)           roles.push('user');
+  if ($('rol-facturadora').checked)    roles.push('facturadora');
+  if ($('rol-web').checked)            roles.push('web');
+  if ($('rol-vendedora').checked)      roles.push('vendedora');
+  if ($('rol-gruporecordar').checked)  roles.push('gruporecordar');
 
   if (!nombre || !email) { err.textContent='Nombre y correo son obligatorios.'; err.style.display='block'; return; }
   if (roles.length===0)  { err.textContent='Selecciona al menos un rol.'; err.style.display='block'; return; }
@@ -2442,7 +2516,7 @@ async function saveUsuario() {
       if (editUserId===session.id) {
         session.name=nombre; session.email=email; session.roles=roles; session.activo=activo;
         $('s-name').textContent = nombre;
-        const roleNames = { admin:'👑 Admin', user:'👤 Operador', facturadora:'🧾 Facturadora', web:'🌐 Web', vendedora:'🗺️ Vendedora' };
+        const roleNames = { admin:'👑 Admin', user:'👤 Operador', facturadora:'🧾 Facturadora', web:'🌐 Web', vendedora:'🗺️ Vendedora', gruporecordar:'📣 Grupo Recordar' };
         $('s-role').textContent = roles.map(r=>roleNames[r]||r).join(' · ');
         $('s-avatar').textContent = nombre[0].toUpperCase();
         $('nav-productos').style.display = isAdmin() ? 'flex' : 'none';
@@ -2792,8 +2866,16 @@ let currentTab = 'pedidos'; // 'pedidos' | 'web'
 
 function switchTab(tab) {
   currentTab = tab;
-  $('tab-pedidos').className = 'btn btn-sm ' + (tab==='pedidos' ? 'btn-accent' : 'btn-outline');
-  $('tab-web').className     = 'btn btn-sm ' + (tab==='web'     ? 'btn-accent' : 'btn-outline');
+  $('tab-pedidos').className       = 'btn btn-sm ' + (tab==='pedidos'       ? 'btn-accent' : 'btn-outline');
+  $('tab-web').className           = 'btn btn-sm ' + (tab==='web'           ? 'btn-accent' : 'btn-outline');
+  $('tab-gruporecordar').className = 'btn btn-sm ' + (tab==='gruporecordar' ? 'btn-accent' : 'btn-outline');
+  // Actualizar etiqueta del botón Nuevo Pedido según el tab activo
+  const btnNuevo = $('btn-nuevo-pedido');
+  if (btnNuevo) {
+    if (tab === 'gruporecordar') btnNuevo.textContent = '+ Nuevo pedido (Grupo Recordar)';
+    else if (tab === 'web')      btnNuevo.textContent = '+ Nuevo pedido web';
+    else                         btnNuevo.textContent = '+ Nuevo pedido';
+  }
   renderPedidos();
   updateStats();
 }
@@ -2843,6 +2925,51 @@ function openPedidoWebModal() {
   openPedidoModal(null, 'web');
 }
 
+function renderGrupoRecordar() {
+  const q   = $('gr-search').value.toLowerCase();
+  const est = $('gr-estado').value;
+  const todos = get('dp_pedidos').filter(p => p.origen==='gruporecordar');
+  const base  = isAdmin() ? todos : todos.filter(p => p.creadoPor===session.name);
+  const list  = base.filter(p => {
+    const hit = !q || [p.nombre,p.ciudad,p.factura,p.cc,p.celular,p.producto].some(v=>(v||'').toLowerCase().includes(q));
+    return hit && (!est || p.estado===est);
+  });
+  const tbody = $('tbody-gruporecordar');
+  tbody.innerHTML='';
+  $('empty-gruporecordar').style.display = list.length?'none':'block';
+  list.forEach(p => {
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td class="td-mono">${p.factura||'—'}</td>
+      <td class="td-muted">${fmtDate(p.fecha)}</td>
+      <td class="td-name">${p.nombre}</td>
+      <td class="td-muted">${p.ciudad}</td>
+      <td style="max-width:180px">
+        <div style="display:flex;flex-wrap:wrap;gap:.25rem">
+          ${(p.lineas&&p.lineas.length?p.lineas:[{producto:p.producto,cantidad:1}])
+            .map(l=>`<span style="display:inline-flex;align-items:center;background:#fdf2f8;color:#db2777;border-radius:6px;padding:.18rem .5rem;font-size:.72rem;font-weight:600;white-space:nowrap">${l.cantidad}× ${(l.producto||'').split(' ').slice(0,3).join(' ')}</span>`).join('')}
+        </div>
+      </td>
+      <td style="font-weight:600;color:var(--blue)">${fmtMoney(p.valorTotal)}</td>
+      <td><span class="badge badge-${p.estado?.toLowerCase()}">${estadoIco(p.estado)} ${p.estado}</span></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" onclick="verPedido('${p.id}');event.stopPropagation()">Ver</button>
+        ${(isAdmin() || (!isAdmin() && (hasRole('gruporecordar')||hasRole('user')) && p.creadoPor===session.name))?`<button class="btn btn-outline btn-sm" style="margin-left:.3rem" onclick="openPedidoModal('${p.id}');event.stopPropagation()">✏️</button>`:''}
+      </td>`;
+    tr.onclick = ()=>verPedido(p.id);
+    tbody.appendChild(tr);
+  });
+  // stats grupo recordar
+  $('sgr-total').textContent  = list.length;
+  $('sgr-pend').textContent   = list.filter(p=>p.estado==='Pendiente').length;
+  $('sgr-desp').textContent   = list.filter(p=>p.estado==='Despachado').length;
+  $('sgr-ventas').textContent = '$'+list.reduce((s,p)=>s+(p.valorTotal||0),0).toLocaleString('es-CO');
+}
+
+function openPedidoGrupoRecordarModal() {
+  openPedidoModal(null, 'gruporecordar');
+}
+
 // ─────────────────────────────────────────────
 //  INIT — arranca cuando Firebase está listo
 // ─────────────────────────────────────────────
@@ -2866,7 +2993,7 @@ function startApp() {
               if (freshUser) {
                 localStorage.setItem('dp_session_user', JSON.stringify(freshUser));
                 loadAllData().then(() => {
-                  renderPedidos(); updateStats(); renderWeb();
+                  renderPedidos(); updateStats(); renderWeb(); renderGrupoRecordar();
                   initDataIfNeeded();
                   subscribeToData();
                 });
@@ -2883,7 +3010,7 @@ function startApp() {
           loadLocalCache();
           bootApp(user);
           loadAllData().then(() => {
-            renderPedidos(); updateStats(); renderWeb();
+            renderPedidos(); updateStats(); renderWeb(); renderGrupoRecordar();
             initDataIfNeeded();
             subscribeToData();
           });
