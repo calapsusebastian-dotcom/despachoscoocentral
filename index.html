@@ -474,6 +474,7 @@
           </div>
         </div>
         <div class="topbar-actions">
+          <button class="btn btn-outline" id="btn-historico" onclick="cargarHistoricoCompleto()" title="Por defecto solo se cargan los últimos 60 días. Clic para traer todos los pedidos.">📚 Cargar histórico completo</button>
           <button class="btn btn-outline" onclick="exportExcel()">⬇ Excel</button>
           <button class="btn btn-accent" id="btn-nuevo-pedido" onclick="openPedidoModal()">+ Nuevo pedido</button>
         </div>
@@ -1131,6 +1132,39 @@ async function fsListPedidos(diasAtras = 60) {
   }
 }
 
+// Trae TODOS los pedidos sin filtro de fecha (histórico completo)
+// Usar solo bajo demanda — hace más lecturas que fsListPedidos()
+let _historicoCompleto = false;
+function actualizarBtnHistorico() {
+  const btn = $('btn-historico');
+  if (!btn) return;
+  if (_historicoCompleto) {
+    btn.textContent = '✅ Histórico completo';
+    btn.disabled = true;
+  } else {
+    btn.textContent = '📚 Cargar histórico completo';
+    btn.disabled = false;
+  }
+}
+async function cargarHistoricoCompleto() {
+  if (_historicoCompleto) { toast('Ya tienes el histórico completo cargado'); return; }
+  const btn = $('btn-historico');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Cargando…'; }
+  toast('Cargando histórico completo, puede tardar…', 5000);
+  try {
+    const todos = await fsList('pedidos');
+    _cache.dp_pedidos = todos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+    _historicoCompleto = true;
+    saveLocalCache();
+    renderPedidos(); updateStats(); renderWeb(); renderGrupoRecordar();
+    toast(`Histórico completo cargado: ${todos.length} pedidos`);
+  } catch(e) {
+    toast('Error cargando histórico: ' + e.message);
+  } finally {
+    actualizarBtnHistorico();
+  }
+}
+
 // ─────────────────────────────────────────────
 //  HELPERS DE APP  (igual que antes)
 // ─────────────────────────────────────────────
@@ -1178,6 +1212,7 @@ function saveLocalCache() {
       pedidos:   _cache.dp_pedidos,
       productos: _cache.dp_productos,
       usuarios:  _cache.dp_users,
+      historicoCompleto: _historicoCompleto,
     }));
   } catch(e) {}
 }
@@ -1187,6 +1222,7 @@ function loadLocalCache() {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return false;
     const data = JSON.parse(raw);
+    _historicoCompleto = !!data.historicoCompleto;
     if (Date.now() - data.ts > CACHE_TTL) return false;
     _cache.dp_pedidos   = data.pedidos   || [];
     _cache.dp_productos = data.productos || [];
@@ -1198,6 +1234,7 @@ function loadLocalCache() {
 async function loadAllData() {
   // 1. Cache local → UI instantánea
   const hasCached = loadLocalCache();
+  actualizarBtnHistorico();
   if (hasCached && session) {
     renderPedidos(); updateStats(); renderWeb(); renderGrupoRecordar();
   }
@@ -1208,8 +1245,13 @@ async function loadAllData() {
   const cacheAge  = cacheData ? Date.now() - (cacheData.ts||0) : Infinity;
 
   if (cacheAge > 10 * 60 * 1000 || !hasCached) {
-    const pedidos = await fsListPedidos(60).catch(()=>_cache.dp_pedidos);
-    _cache.dp_pedidos = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+    if (_historicoCompleto) {
+      const pedidos = await fsList('pedidos').catch(()=>_cache.dp_pedidos);
+      _cache.dp_pedidos = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+    } else {
+      const pedidos = await fsListPedidos(60).catch(()=>_cache.dp_pedidos);
+      _cache.dp_pedidos = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+    }
   }
 
   // 3. Productos y usuarios: solo si cache >24h
@@ -2270,6 +2312,7 @@ function saveDespacho() {
 //  EXPORTAR EXCEL
 // ─────────────────────────────────────────────
 function exportExcel() {
+  if (!_historicoCompleto && !confirm('Solo tienes cargados los pedidos de los últimos 60 días. ¿Exportar solo esos? (Cancela y usa "📚 Cargar histórico completo" para exportar todo)')) return;
   const pedidos = get('dp_pedidos');
 
   // Columnas que se combinan por pedido (datos del cliente + totales)
