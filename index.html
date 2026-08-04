@@ -1262,8 +1262,16 @@ async function loadAllData() {
       const pedidos = await fsList('pedidos').catch(()=>_cache.dp_pedidos);
       _cache.dp_pedidos = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
     } else {
-      const pedidos = await fsListPedidos(60).catch(()=>_cache.dp_pedidos);
-      _cache.dp_pedidos = pedidos.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+      // NO reemplazar toda la caché: fsListPedidos(60) solo trae los últimos 60 días.
+      // Si reemplazamos todo, cualquier pedido más viejo que ya estaba cargado
+      // desaparece de la vista aunque siga existiendo en Firestore (parece "eliminado").
+      // Por eso combinamos: actualizamos/agregamos los recientes y conservamos el resto.
+      const pedidosRecientes = await fsListPedidos(60).catch(()=>null);
+      if (pedidosRecientes) {
+        const mapa = new Map(_cache.dp_pedidos.map(p=>[p.id,p]));
+        pedidosRecientes.forEach(p => mapa.set(p.id, p));
+        _cache.dp_pedidos = [...mapa.values()].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+      }
     }
   }
 
@@ -1923,6 +1931,10 @@ function savePedido() {
     origen:       original?.origen || openPedidoModal._origen || 'interno',
     rutaId:       original?.rutaId || openPedidoModal._rutaId || '',
     rutaNombre:   original?.rutaNombre || ((openPedidoModal._rutaId) ? (get('dp_rutas')||[]).find(r=>r.id===openPedidoModal._rutaId)?.nombre||'' : ''),
+    // El formulario de edición no tiene campos para guía/fecha de despacho —
+    // hay que conservarlos del pedido original o se pierden al guardar (bug reportado).
+    guia:          original?.guia || '',
+    fechaDespacho: original?.fechaDespacho || '',
   };
 
   // 1. Actualizar cache local INMEDIATAMENTE
