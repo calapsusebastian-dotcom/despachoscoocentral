@@ -1052,15 +1052,28 @@ async function fsSet(col, id, data, fbUser) {
     method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields: objToFs(data) })
   });
-  return r.ok;
+  if (!r.ok) {
+    let errBody = '';
+    try { errBody = await r.text(); } catch(e) {}
+    console.error(`fsSet falló [${col}/${id}] ${r.status}:`, errBody);
+    throw new Error(`Firestore ${r.status}: ${errBody || 'error desconocido'}`);
+  }
+  return true;
 }
 
 // DELETE un documento
 async function fsDel(col, id) {
   const token = await getToken();
-  await fetch(`${FS_BASE}/${col}/${id}`, {
+  const r = await fetch(`${FS_BASE}/${col}/${id}`, {
     method: 'DELETE', headers: { Authorization: `Bearer ${token}` }
   });
+  if (!r.ok) {
+    let errBody = '';
+    try { errBody = await r.text(); } catch(e) {}
+    console.error(`fsDel falló [${col}/${id}] ${r.status}:`, errBody);
+    throw new Error(`Firestore ${r.status}: ${errBody || 'error desconocido'}`);
+  }
+  return true;
 }
 
 // LIST toda una colección (colecciones pequeñas: productos, usuarios, clientes, rutas)
@@ -1926,7 +1939,7 @@ function savePedido() {
   toast(esNuevo ? '✅ Pedido creado' : '✅ Pedido actualizado');
 
   // 3. Guardar en Firebase en segundo plano
-  setDoc('dp_pedidos', obj).catch(() => toast('⚠️ Error guardando en servidor'));
+  setDoc('dp_pedidos', obj).catch(e => toast('⚠️ No se guardó en el servidor: ' + e.message, 6000));
   marcarCambio();
   // 4. Guardar/actualizar cliente automáticamente
   if (esNuevo) guardarCliente(obj);
@@ -2276,7 +2289,7 @@ function saveFactura() {
     renderPedidos();
     toast('✅ Factura actualizada');
     setTimeout(() => verPedido(editFacturaId), 200);
-    setDoc('dp_pedidos', p).catch(() => toast('⚠️ Error guardando en servidor'));
+    setDoc('dp_pedidos', p).catch(e => toast('⚠️ No se guardó en el servidor: ' + e.message, 6000));
     marcarCambio();
   }
 }
@@ -2303,7 +2316,7 @@ function saveDespacho() {
     renderPedidos(); updateStats();
     toast('🚚 Pedido marcado como despachado');
     setTimeout(() => verPedido(despachandoId), 200);
-    setDoc('dp_pedidos', p).catch(() => toast('⚠️ Error guardando en servidor'));
+    setDoc('dp_pedidos', p).catch(e => toast('⚠️ No se guardó en el servidor: ' + e.message, 6000));
     marcarCambio();
   }
 }
