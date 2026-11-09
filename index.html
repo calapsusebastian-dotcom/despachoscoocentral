@@ -2357,13 +2357,13 @@ function exportExcel() {
   const pedidos = get('dp_pedidos');
 
   // Columnas que se combinan por pedido (datos del cliente + totales)
-  const colsMerge = [0,1,2,3,4,5,6,7,13,14,15,16,17,18,19,20]; // índices de columnas a mergear
+  const colsMerge = [0,1,2,3,4,5,6,7,13,14,15,16,17,18,19,20,21,22]; // índices de columnas a mergear
 
   const headers = [
     'Fecha Pedido','Tipo Persona','Nombre / Razón Social','C.C. / NIT','Email','Celular',
     'Dirección Entrega','Ciudad',
     'Producto','Tipo Molienda','Unidades','Precio Unitario ($)','Subtotal ($)',
-    'Total Envío ($)','Valor Total ($)','No. Factura','No. Orden','Medio de Pago','Tipo de Precio','Observaciones','Estado','Registrado por'
+    'Total Envío ($)','Valor Total ($)','No. Factura','No. Orden','Medio de Pago','Tipo de Precio','Observaciones','Estado','Guía de Envío','Registrado por'
   ];
 
   const data = [headers];
@@ -2395,8 +2395,10 @@ function exportExcel() {
         i===0 ? (p.factura||'')     : '',
         i===0 ? (p.orden||'')       : '',
         i===0 ? (p.medioPago||'')   : '',
+        i===0 ? (p.tipoPrecio||'')  : '',
         i===0 ? (p.observacion||'') : '',
         i===0 ? p.estado            : '',
+        i===0 ? (p.guia||'')        : '',
         i===0 ? p.creadoPor         : '',
       ]);
     });
@@ -2418,7 +2420,7 @@ function exportExcel() {
     {wch:12},{wch:10},{wch:28},{wch:14},{wch:24},{wch:14},
     {wch:30},{wch:12},
     {wch:22},{wch:14},{wch:8},{wch:16},{wch:14},
-    {wch:14},{wch:14},{wch:12},{wch:12},{wch:16},{wch:28},{wch:12},{wch:16}
+    {wch:14},{wch:14},{wch:12},{wch:12},{wch:16},{wch:16},{wch:28},{wch:12},{wch:18},{wch:16}
   ];
 
   const wb = XLSX.utils.book_new();
