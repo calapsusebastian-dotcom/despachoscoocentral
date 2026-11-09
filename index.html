@@ -401,9 +401,47 @@
 
     /* Botón "Nuevo pedido" oculto por traslado al nuevo sistema */
     #btn-nuevo-pedido { display:none !important; }
+
+    /* ═══ ALERTA DE TRASLADO ═══ */
+    #alerta-traslado {
+      position:fixed; inset:0; z-index:10001; display:flex; align-items:center; justify-content:center;
+      padding:1rem; background:rgba(15,23,42,.5); backdrop-filter:blur(4px);
+      animation:fadeIn .2s ease;
+    }
+    #alerta-traslado.oculta { display:none; }
+    #alerta-traslado .at-card {
+      background:#fff; border-radius:20px; max-width:440px; width:100%;
+      padding:2rem 1.75rem 1.5rem; text-align:center; font-family:var(--font);
+      box-shadow:0 20px 60px rgba(15,23,42,.25); border-top:5px solid var(--warn);
+      animation:slideUp .3s cubic-bezier(.22,1,.36,1) both;
+    }
+    #alerta-traslado .at-ico { font-size:2.4rem; margin-bottom:.6rem; }
+    #alerta-traslado h2 { font-size:1.25rem; font-weight:800; letter-spacing:-.02em; color:var(--text); margin-bottom:.5rem; }
+    #alerta-traslado p { font-size:.9rem; color:var(--text2); line-height:1.5; margin-bottom:1rem; }
+    #alerta-traslado .at-url {
+      display:block; font-family:monospace; font-size:.85rem; font-weight:600; color:var(--blue);
+      background:var(--blue-dim); border-radius:9px; padding:.6rem .8rem; margin-bottom:1.3rem;
+      word-break:break-all; text-decoration:none;
+    }
+    #alerta-traslado .at-acciones { display:flex; gap:.6rem; justify-content:center; flex-wrap:wrap; }
+    #alerta-traslado .at-acciones a { text-decoration:none; }
   </style>
 </head>
 <body>
+
+<!-- ALERTA DE TRASLADO -->
+<div id="alerta-traslado" role="alertdialog" aria-labelledby="at-titulo">
+  <div class="at-card">
+    <div class="at-ico">⚠️</div>
+    <h2 id="at-titulo">¡Nos trasladamos!</h2>
+    <p>DespachosPro ahora funciona en una nueva dirección. Por favor ingresa desde aquí:</p>
+    <a class="at-url" href="https://tostados.coocentral.local/login">https://tostados.coocentral.local/login</a>
+    <div class="at-acciones">
+      <a class="btn btn-accent" href="https://tostados.coocentral.local/login">Ir al nuevo sitio →</a>
+      <button class="btn btn-outline" type="button" onclick="document.getElementById('alerta-traslado').classList.add('oculta')">Cerrar</button>
+    </div>
+  </div>
+</div>
 
 <!-- MARCA DE AGUA -->
 <div id="marca-agua" aria-hidden="true"></div>
